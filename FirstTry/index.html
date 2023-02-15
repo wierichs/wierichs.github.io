@@ -10,6 +10,11 @@
         <title>Temperature converter</title>
     </head>
     <body>
+	<script>
+	if('serviceWorker' in navigator) {
+	  navigator.serviceWorker.register('/sw.js', { scope: '/' });
+	}
+	</script>
         <form id="converter">
 		  <label for="input-temp">temperature</label>
 		  <input type="text" id="input-temp" name="input-temp" value="20" />
