@@ -1,8 +1,8 @@
 const form = document.forms['converter'];
-const inputField = form['input-temp'];
-const fromUnitField = form['input-unit'];
-const toUnitField = form['output-unit'];
-const outputField = form['output-temp'];
+const inputField = form['input_temp'];
+const fromUnitField = form['input_unit'];
+const toUnitField = form['output_unit'];
+const outputField = form['output_temp'];
 
 function convertTemp(value, fromUnit, toUnit) {
 	var baseKelvin = 0;
