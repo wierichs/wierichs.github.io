@@ -5,7 +5,53 @@ const outputField = document.getElementById('output-temp');
 const form = document.getElementById('converter');
 
 function convertTemp(value, fromUnit, toUnit) {
-  if (fromUnit === 'c') {
+	var baseKelvin = 0;
+	var baseCelsius = 273.15;
+	var baseFahrenheit = 273.15;
+	var factorKelvin = 1;
+	var factorCelsius = 1;
+	var factorFahrenheit = (9 / 5);
+	var offsetKelvin = 0;
+	var offsetCelsius = 0;
+	var offsetFahrenheit = 32;
+	
+  switch(fromUnit)
+  {
+	  case 'c':
+		switch(toUnit)
+		{
+			case 'f':
+				return (value + baseCelsius + offsetFahrenheit) * factorFahrenheit;
+				break;				
+			case 'k':
+				return value + baseCelsius;
+				break;
+		}
+		break;
+	  case 'f':
+		switch(toUnit)
+		{
+			case 'c':
+				return (value + baseFahrenheit - offsetFahrenheit) * 1 / factorFahrenheit;
+				break;
+			case 'k':
+				return (value - baseFahrenheit - offsetFahrenheit) * 1 / factorFahrenheit;
+				break;				
+		}
+		break;
+	  case 'k':
+		switch(toUnit)
+		{
+			case 'c':
+				return value + baseCelsius;
+				break;
+			case 'f':
+				return (value + baseFahrenheit + offsetFahrenheit) * factorFahrenheit;
+				break;				
+		}
+		break;
+  }
+/*  if (fromUnit === 'c') {
     if (toUnit === 'f') {
       return value * 9 / 5 + 32;
     } else if (toUnit === 'k') {
@@ -28,7 +74,7 @@ function convertTemp(value, fromUnit, toUnit) {
       return value * 9 / 5 - 459.67;
     }
     return value;
-  }
+  } */
   throw new Error('Invalid unit');
 }
 
