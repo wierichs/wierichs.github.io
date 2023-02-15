@@ -1,8 +1,8 @@
-const inputField = document.getElementById('input-temp');
-const fromUnitField = document.getElementById('input-unit');
-const toUnitField = document.getElementById('output-unit');
-const outputField = document.getElementById('output-temp');
-const form = document.getElementById('converter');
+const inputField = document.all.getElementById('input-temp');
+const fromUnitField = document.all.getElementById('input-unit');
+const toUnitField = document.all.getElementById('output-unit');
+const outputField = document.all.getElementById('output-temp');
+const form = document.all.getElementById('converter');
 
 function convertTemp(value, fromUnit, toUnit) {
 	var baseKelvin = 0;
