@@ -21,10 +21,10 @@ function convertTemp(value, fromUnit, toUnit) {
 		switch(toUnit)
 		{
 			case 'f':
-				return (value + baseCelsius + offsetFahrenheit) * factorFahrenheit;
+				return value * 9 / 5 + 32;
 				break;				
 			case 'k':
-				return value + baseCelsius;
+				return value + 273.15;
 				break;
 		}
 		break;
@@ -32,10 +32,10 @@ function convertTemp(value, fromUnit, toUnit) {
 		switch(toUnit)
 		{
 			case 'c':
-				return (value + baseFahrenheit - offsetFahrenheit) * 1 / factorFahrenheit;
+				return (value - 32) * 5 / 9;
 				break;
 			case 'k':
-				return (value - baseFahrenheit - offsetFahrenheit) * 1 / factorFahrenheit;
+				return (value + 459.67) * 5 / 9;
 				break;				
 		}
 		break;
@@ -43,39 +43,16 @@ function convertTemp(value, fromUnit, toUnit) {
 		switch(toUnit)
 		{
 			case 'c':
-				return value + baseCelsius;
+				return value - 273.15;
 				break;
 			case 'f':
-				return (value + baseFahrenheit + offsetFahrenheit) * factorFahrenheit;
+				return value * 9 / 5 - 459.67;
 				break;				
 		}
 		break;
   }
-/*  if (fromUnit === 'c') {
-    if (toUnit === 'f') {
-      return value * 9 / 5 + 32;
-    } else if (toUnit === 'k') {
-      return value + 273.15;
-    }
-    return value;
-  }
-  if (fromUnit === 'f') {
-    if (toUnit === 'c') {
-      return (value - 32) * 5 / 9;
-    } else if (toUnit === 'k') {
-      return (value + 459.67) * 5 / 9;
-    }
-    return value;
-  }
-  if (fromUnit === 'k') {
-    if (toUnit === 'c') {
-      return value - 273.15;
-    } else if (toUnit === 'f') {
-      return value * 9 / 5 - 459.67;
-    }
-    return value;
-  } */
-  throw new Error('Invalid unit');
+  //throw new Error('Invalid unit');
+  return value;
 }
 
 form.addEventListener('input', () => {
