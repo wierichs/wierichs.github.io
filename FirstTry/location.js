@@ -2,8 +2,8 @@ function geoFindMe() {
 
   const status = document.querySelector('#status');
   const mapLink = document.querySelector('#map-link');
-  document.querySelector('#form').visibility = true;
-  document.querySelector('#map').visibility = false;
+  document.querySelector('#form').style = "display: block";
+  document.querySelector('#map').style = "display: none";
 
   mapLink.href = '';
   mapLink.textContent = '';
@@ -36,8 +36,8 @@ function showMap(){
  const zoomlevel = 12;
  const longitude = aLinkParts.pop();
  const latitude = aLinkParts.pop();
- document.querySelector('#form').visibility = false;
- document.querySelector('#map').visibility = true;
+ document.querySelector('#form').style = "display: none";
+ document.querySelector('#map').style = "display: block";
   // Creating a map object
   var map = L.map('map').setView([latitude, longitude], zoomlevel);
  
