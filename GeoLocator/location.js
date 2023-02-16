@@ -51,9 +51,9 @@ function stopWatch() {
 }
 
 function geoFindMe() {
+  document.querySelector('#location-list').innerHTML = "<a id=\"map-link\" target=\"_blank\"></a>";
   const status = document.querySelector('#status');
   const mapLink = document.querySelector('#map-link');
-  document.querySelector('#location-list').innerHTML = "<a id=\"map-link\" target=\"_blank\"></a>";
 
   mapLink.href = '';
   mapLink.textContent = '';
