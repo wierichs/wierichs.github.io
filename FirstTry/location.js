@@ -28,4 +28,21 @@ function geoFindMe() {
 
 }
 
+function showMap(){
+  // Creating map options
+  var mapOptions = {
+    center: [latitude, longitude],
+    zoom: z
+  }
+ 
+  // Creating a map object
+  var map = new L.map(‘map’, mapOptions);
+ 
+  // Creating a Layer object
+  var layer = new     L.TileLayer(‘http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png’);
+ 
+  // Adding layer to the map
+  map.addLayer(layer);
+}
 document.querySelector('#find-me').addEventListener('click', geoFindMe);
+document.querySelector('#show-me').addEventListener('click', showMap);
