@@ -33,15 +33,16 @@ function geoFindMe() {
 function showMap(){
  var linkObject = document.querySelector('#map-link');
  var aLinkParts = linkObject.href.split('/');
+ const zoomlevel = 12;
  const longitude = aLinkParts.pop();
  const latitude = aLinkParts.pop();
  document.querySelector('#form').visibility = false;
  document.querySelector('#map').visibility = true;
   // Creating a map object
-  var map = L.map('map').setView([latitude, longitude], 10);
+  var map = L.map('map').setView([latitude, longitude], zoomlevel);
  
   // Creating a Layer object
-  var layer = new L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  var layer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(map);
