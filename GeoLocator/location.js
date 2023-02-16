@@ -37,6 +37,7 @@ function positionError(error) {
 function startWatch() {
   if (!geoWatch) {
     if ("geolocation" in navigator && "watchPosition" in navigator.geolocation) {
+      document.querySelector('#location-list').innerHTML = "";
       geoWatch = navigator.geolocation.watchPosition(setCurrentPosition, positionError, {
         enableHighAccuracy: false, timeout: 15000, maximumAge: 0
       });
