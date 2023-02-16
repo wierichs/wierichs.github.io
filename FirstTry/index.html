@@ -6,7 +6,13 @@
   <link rel="shortcut icon" href="https://c.s-microsoft.com/favicon.ico?v2" />
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="./style.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+     integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI="
+     crossorigin=""/>
+  <!-- Make sure you put this AFTER Leaflet's CSS -->
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+     integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM="
+     crossorigin=""></script>
   <title>Temperature converter</title>
  </head>
  <body>
@@ -34,9 +40,8 @@
    <p id="status"></p>
    <a id="map-link" target="_blank"></a>
    <button id="show-me">Show in map</button><br />
-   <div id =”my-map” style = “width:800px; height:600px;”></div>
+   <div id="map" style="width:800px; height:600px;"></div>
   </p>
-  <script src = "http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
   <script src="./location.js"></script>
 
   <script>

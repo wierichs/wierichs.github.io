@@ -11,8 +11,8 @@ function geoFindMe() {
     const longitude = position.coords.longitude;
 
     status.textContent = '';
-    mapLink.href = `https://www.openstreetmap.org/#map=18/${latitude}/${longitude}`;
-    mapLink.textContent = `Latitude: ${latitude} °, Longitude: ${longitude} °`;
+    mapLink.href = 'https://www.openstreetmap.org/#map=18/${latitude}/${longitude}';
+    mapLink.textContent = 'Latitude: ${latitude} °, Longitude: ${longitude} °';
   }
 
   function error() {
@@ -29,17 +29,14 @@ function geoFindMe() {
 }
 
 function showMap(){
-  // Creating map options
-  var mapOptions = {
-    center: [latitude, longitude],
-    zoom: z
-  }
- 
   // Creating a map object
-  var map = new L.map(‘map’, mapOptions);
+  var map = L.map('map').setView([latitude, longitude], 10);
  
   // Creating a Layer object
-  var layer = new     L.TileLayer(‘http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png’);
+  var layer = new L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
  
   // Adding layer to the map
   map.addLayer(layer);
