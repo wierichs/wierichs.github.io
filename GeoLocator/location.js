@@ -1,5 +1,56 @@
-function geoFindMe() {
+var geoWatch;
+function setCurrentPosition(position) {
+  var locationList = document.querySelector('#location-list');
+  if (locationList) {
+    locationList.innerHTML += "<a href=\"https://www.openstreetmap.org/#map=18/";
+    locationList.innerHTML += position.coords.latitude;
+    locationList.innerHTML += "/";
+    locationList.innerHTML += position.coords.longitude;
+    locationList.innerHTML += "\"> Latitude: ";
+    locationList.innerHTML += position.coords.latitude;
+    locationList.innerHTML += " °, Longitude: ";
+    locationList.innerHTML += position.coords.longitude;
+    locationList.innerHTML += " °</a><br/>";
+  }
+}
 
+function positionError(error) {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      console.error("User denied the request for Geolocation.");
+      break;
+
+    case error.POSITION_UNAVAILABLE:
+      console.error("Location information is unavailable.");
+      break;
+
+    case error.TIMEOUT:
+      console.error("The request to get user location timed out.");
+      break;
+
+    case error.UNKNOWN_ERROR:
+      console.error("An unknown error occurred.");
+      break;
+  }
+}
+
+function startWatch() {
+  if (!geoWatch) {
+    if ("geolocation" in navigator && "watchPosition" in navigator.geolocation) {
+      geoWatch = navigator.geolocation.watchPosition(setCurrentPosition, positionError, {
+        enableHighAccuracy: false, timeout: 15000, maximumAge: 0
+      });
+    }
+  }
+}
+
+function stopWatch() {
+  navigator.geolocation.clearWatch(geoWatch);
+  document.querySelector('#location-list').innerHTML = "";
+  geoWatch = undefined;
+}
+
+function geoFindMe() {
   const status = document.querySelector('#status');
   const mapLink = document.querySelector('#map-link');
 
@@ -28,7 +79,6 @@ function geoFindMe() {
     mapLink.textContent = 'Locating…';
     navigator.geolocation.getCurrentPosition(success, error);
   }
-
 }
 
 function showMap(){
@@ -51,4 +101,6 @@ function showMap(){
   map.addLayer(layer);
 }
 document.querySelector('#find-me').addEventListener('click', geoFindMe);
+document.querySelector('#follow-me').addEventListener('click', startWatch);
+document.querySelector('#stop-follow-me').addEventListener('click', stopWatch);
 document.querySelector('#show-me').addEventListener('click', showMap);
