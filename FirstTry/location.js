@@ -29,6 +29,10 @@ function geoFindMe() {
 }
 
 function showMap(){
+ var linkObject = document.querySelector('#map-link');
+ var aLinkParts = linkObject.href.split('/');
+ const latitude = aLinkParts.pop();
+ const longitude = aLinkParts.pop();
   // Creating a map object
   var map = L.map('map').setView([latitude, longitude], 10);
  
