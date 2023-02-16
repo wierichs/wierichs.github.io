@@ -2,8 +2,8 @@ function geoFindMe() {
 
   const status = document.querySelector('#status');
   const mapLink = document.querySelector('#map-link');
-  document.querySelector('#form').style = "display: block";
-  document.querySelector('#map').style = "display: none";
+  document.querySelector('#form').style = "display: block;";
+  document.querySelector('#map').style = "display: none;";
 
   mapLink.href = '';
   mapLink.textContent = '';
@@ -12,19 +12,22 @@ function geoFindMe() {
     const latitude  = position.coords.latitude;
     const longitude = position.coords.longitude;
 
-    status.textContent = '';
+    //status.textContent = '';
     mapLink.href = 'https://www.openstreetmap.org/#map=18/' + latitude + '/' + longitude;
     mapLink.textContent = 'Latitude: ' + latitude + ' °, Longitude: ' + longitude + ' °';
   }
 
   function error() {
-    status.textContent = 'Unable to retrieve your location';
+    //status.textContent = 'Unable to retrieve your location';
+    mapLink.textContent = 'Unable to retrieve your location';
   }
 
   if (!navigator.geolocation) {
-    status.textContent = 'Geolocation is not supported by your browser';
+//    status.textContent = 'Geolocation is not supported by your browser';
+    mapLink.textContent = 'Geolocation is not supported by your browser';
   } else {
-    status.textContent = 'Locating…';
+//    status.textContent = 'Locating…';
+    mapLink.textContent = 'Locating…';
     navigator.geolocation.getCurrentPosition(success, error);
   }
 
@@ -36,8 +39,8 @@ function showMap(){
  const zoomlevel = 12;
  const longitude = aLinkParts.pop();
  const latitude = aLinkParts.pop();
- document.querySelector('#form').style = "display: none";
- document.querySelector('#map').style = "display: block";
+ document.querySelector('#form').style = "display: none";;
+ document.querySelector('#map').style = "display: block; min-width: 180px; min-height: 180px;";
   // Creating a map object
   var map = L.map('map').setView([latitude, longitude], zoomlevel);
  
