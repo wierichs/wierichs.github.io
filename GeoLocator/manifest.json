@@ -1,0 +1,17 @@
+{
+  "lang": "de-de",
+  "name": "Geo Locator",
+  "short_name": "GeoLocator",
+  "description": "Lass dir von deinem Gerät sagen, wo du bist.",
+  "start_url": "./",
+  "background_color": "#2f3d58",
+  "theme_color": "#2f3d58",
+  "orientation": "any",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "./icon512.png",
+      "sizes": "512x512"
+    }
+  ]
+}
