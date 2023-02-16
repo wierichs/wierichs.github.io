@@ -2,7 +2,7 @@ var geoWatch;
 function setCurrentPosition(position) {
   var locationList = document.querySelector('#location-list');
   if (locationList) {
-    locationList.innerHTML += "<a href=\"https://www.openstreetmap.org/#map=18/";
+    locationList.innerHTML += "<a id=\"map-link\" target=\"_blank\" href=\"https://www.openstreetmap.org/#map=18/";
     locationList.innerHTML += position.coords.latitude;
     locationList.innerHTML += "/";
     locationList.innerHTML += position.coords.longitude;
@@ -35,9 +35,9 @@ function positionError(error) {
 }
 
 function startWatch() {
+  document.querySelector('#location-list').childNodes = null;
   if (!geoWatch) {
     if ("geolocation" in navigator && "watchPosition" in navigator.geolocation) {
-      document.querySelector('#location-list').innerHTML = "";
       geoWatch = navigator.geolocation.watchPosition(setCurrentPosition, positionError, {
         enableHighAccuracy: false, timeout: 15000, maximumAge: 0
       });
@@ -47,13 +47,13 @@ function startWatch() {
 
 function stopWatch() {
   navigator.geolocation.clearWatch(geoWatch);
-  document.querySelector('#location-list').innerHTML = "";
   geoWatch = undefined;
 }
 
 function geoFindMe() {
   const status = document.querySelector('#status');
   const mapLink = document.querySelector('#map-link');
+  document.querySelector('#location-list').innerHTML = "<a id=\"map-link\" target=\"_blank\"></a>";
 
   mapLink.href = '';
   mapLink.textContent = '';
