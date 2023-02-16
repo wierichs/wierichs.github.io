@@ -2,15 +2,16 @@ var geoWatch;
 function setCurrentPosition(position) {
   var locationList = document.querySelector('#location-list');
   if (locationList) {
-    locationList.innerHTML += "<a id=\"map-link\" target=\"_blank\" href=\"https://www.openstreetmap.org/#map=18/";
-    locationList.innerHTML += position.coords.latitude;
-    locationList.innerHTML += "/";
-    locationList.innerHTML += position.coords.longitude;
-    locationList.innerHTML += "\"> Latitude: ";
-    locationList.innerHTML += position.coords.latitude;
-    locationList.innerHTML += " °, Longitude: ";
-    locationList.innerHTML += position.coords.longitude;
-    locationList.innerHTML += " °</a><br/>";
+    var tagA = "<a id=\"map-link\" target=\"_blank\" href=\"https://www.openstreetmap.org/#map=18/";
+    tagA += position.coords.latitude;
+    tagA += "/";
+    tagA += position.coords.longitude;
+    tagA += "\"> Latitude: ";
+    tagA += position.coords.latitude;
+    tagA += " °, Longitude: ";
+    tagA += position.coords.longitude;
+    tagA += " °</a><br/>";
+    locationList.innerHTML += tagA;
   }
 }
 
