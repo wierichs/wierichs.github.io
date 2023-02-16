@@ -16,30 +16,31 @@
   <title>Temperature converter</title>
  </head>
  <body>
-  <form id="converter">
-   <label for="input-temp">temperature</label>
-   <input type="text" id="input_temp" name="input-temp" value="20" />
-   <label for="input-unit">from</label>
-   <select id="input_unit" name="input-unit">
-	<option value="c" selected>Celsius</option>
-	<option value="f">Fahrenheit</option>
-	<option value="k">Kelvin</option>
-   </select>
-   <label for="output-unit">to</label>
-   <select id="output_unit" name="output-unit">
-	<option value="c">Celsius</option>
-	<option value="f" selected>Fahrenheit</option>
-	<option value="k">Kelvin</option>
-   </select>
-   <output name="output-temp" id="output_temp" for="input-temp input-unit output-unit">68 F</output>
-  </form>
-  <script src="./converter.js"></script>
-
+  <div id="form">
+   <form id="converter">
+    <label for="input-temp">temperature</label>
+    <input type="text" id="input_temp" name="input-temp" value="20" />
+    <label for="input-unit">from</label>
+    <select id="input_unit" name="input-unit">
+	 <option value="c" selected>Celsius</option>
+	 <option value="f">Fahrenheit</option>
+	 <option value="k">Kelvin</option>
+    </select>
+    <label for="output-unit">to</label>
+    <select id="output_unit" name="output-unit">
+	 <option value="c">Celsius</option>
+	 <option value="f" selected>Fahrenheit</option>
+	 <option value="k">Kelvin</option>
+    </select>
+    <output name="output-temp" id="output_temp" for="input-temp input-unit output-unit">68 F</output>
+   </form>
+   <script src="./converter.js"></script>
+  </div>
    <button id="find-me">Show my location</button><br />
    <p id="status"></p>
    <a id="map-link" target="_blank"></a>
    <button id="show-me">Show in map</button><br />
-   <div id="map" style="height:180px;"></div>
+   <div id="map" style="width:180px;height:180px;"></div>
   <script src="./location.js"></script>
 
   <script>
