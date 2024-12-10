@@ -10,7 +10,9 @@ function setCurrentPosition(position) {
     tagA += position.coords.latitude;
     tagA += " °, Longitude: ";
     tagA += position.coords.longitude;
-    tagA += " °</a><br/>";
+    tagA += " °</a>(";
+    tagA += position.coords.altitude;
+    tagA += ")<br/>";
     locationList.innerHTML += tagA;
   }
 }
