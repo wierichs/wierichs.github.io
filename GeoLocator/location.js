@@ -65,6 +65,7 @@ function geoFindMe() {
   function success(position) {
     const latitude  = position.coords.latitude;
     const longitude = position.coords.longitude;
+    const altitude = position.coords.altitude;
 
     //status.textContent = '';
     mapLink.href = 'https://www.openstreetmap.org/#map=18/' + latitude + '/' + longitude;
