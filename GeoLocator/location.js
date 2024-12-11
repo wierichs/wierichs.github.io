@@ -12,7 +12,7 @@ function setCurrentPosition(position) {
     tagA += position.coords.longitude;
     tagA += " °</a>(";
     tagA += position.coords.altitude;
-    tagA += ")<br/>";
+    tagA += "m)<br/>";
     locationList.innerHTML += tagA;
   }
 }
@@ -69,7 +69,7 @@ function geoFindMe() {
 
     //status.textContent = '';
     mapLink.href = 'https://www.openstreetmap.org/#map=18/' + latitude + '/' + longitude;
-    mapLink.textContent = 'Latitude: ' + latitude + ' °, Longitude: ' + longitude + ' °';
+    mapLink.textContent = 'Latitude: ' + latitude + ' °, Longitude: ' + longitude + ' ° (' + altitude + 'm)';
   }
 
   function error() {
