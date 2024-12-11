@@ -3,14 +3,14 @@ function setCurrentPosition(position) {
   var locationList = document.querySelector('#location-list');
   if (locationList) {
     var tagA = "<a id=\"map-link\" target=\"_blank\" href=\"https://www.openstreetmap.org/#map=18/";
-    tagA += position.coords.latitude;
+    tagA += position.coords.latitude ? position.coords.latitude : '0';
     tagA += "/";
-    tagA += position.coords.longitude;
+    tagA += position.coords.longitude ? position.coords.longitude : '0';
     tagA += "\"> Latitude: ";
-    tagA += position.coords.latitude;
+    tagA += position.coords.latitude ? position.coords.latitude : '0';
     tagA += " °, Longitude: ";
-    tagA += position.coords.longitude;
-    tagA += " °</a>(";
+    tagA += position.coords.longitude ? position.coords.longitude : '0';
+    tagA += " °</a>(Alt: ";
     tagA += position.coords.altitude ? position.coords.altitude : '0';
     tagA += "m)<br/>";
     locationList.innerHTML += tagA;
@@ -63,13 +63,13 @@ function geoFindMe() {
   mapLink.textContent = '';
 
   function success(position) {
-    const latitude  = position.coords.latitude;
-    const longitude = position.coords.longitude;
+    const latitude  = position.coords.latitude ? position.coords.latitude : '0';
+    const longitude = position.coords.longitude ? position.coords.longitude : '0';
     const altitude = position.coords.altitude ? position.coords.altitude : '0';
 
     //status.textContent = '';
     mapLink.href = 'https://www.openstreetmap.org/#map=18/' + latitude + '/' + longitude;
-    mapLink.textContent = 'Latitude: ' + latitude + ' °, Longitude: ' + longitude + ' ° (' + altitude + 'm)';
+    mapLink.textContent = 'Latitude: ' + latitude + ' °, Longitude: ' + longitude + ' ° (Alt: ' + altitude + 'm)';
   }
 
   function error() {
