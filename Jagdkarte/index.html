@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#245743">
+  <meta name="description" content="Jagdbezirke und Jagdreviere aus regionalen offenen Geodaten auf OpenStreetMap.">
+  <title>Jagdkarte</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="../GeoLocator/leaflet.css">
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="../GeoLocator/leaflet.js"></script>
+  <script defer src="./lucide.js"></script>
+  <script defer src="./supabase.js"></script>
+  <script defer src="./config.js"></script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./"><i data-lucide="map" aria-hidden="true"></i><span>Jagdkarte</span></a>
+    <span class="network" id="network">Online</span>
+    <div class="account"><span id="user-label">Nicht angemeldet</span><button id="account-button"><i data-lucide="log-in" aria-hidden="true"></i><span>Anmelden</span></button></div>
+  </header>
+  <main>
+    <aside aria-label="Reviersuche">
+      <div class="panel-heading"><span class="eyebrow">OFFENE GEODATEN / DEUTSCHLAND</span><h1>Jagdbezirke</h1></div>
+      <form id="search-form">
+        <fieldset id="search-fields" disabled>
+          <label for="source">Region</label>
+          <select id="source"></select>
+          <label for="query">Jagdbezirk oder Jagdrevier</label>
+          <div class="search-row"><input id="query" type="search" placeholder="Name, Revierart oder Nummer" maxlength="120"><button type="submit" class="icon-button primary" title="Suchen" aria-label="Suchen"><i data-lucide="search" aria-hidden="true"></i></button></div>
+        </fieldset>
+      </form>
+      <div class="notice" id="auth-notice">Reviergrenzen sind frei zugaenglich. Melde dich an, um Revierprofile und Markierungen zu sehen.</div>
+      <div class="result-heading"><h2>Reviere</h2><span id="result-count">0</span></div>
+      <p id="status" role="status" aria-live="polite">Keine Region geladen.</p>
+      <ul id="results" aria-label="Suchergebnisse"></ul>
+      <section id="selection" hidden aria-label="Ausgewaehltes Revier">
+        <div class="selection-heading"><h2 id="selected-name"></h2><button id="clear" class="icon-button" aria-label="Auswahl entfernen" title="Auswahl entfernen"><i data-lucide="x" aria-hidden="true"></i></button></div>
+        <dl id="details"></dl>
+        <div class="selection-actions"><label class="toggle"><input id="show-boundary" type="checkbox" checked> Grenze anzeigen</label><button id="download" class="icon-button" title="GeoJSON herunterladen" aria-label="GeoJSON herunterladen"><i data-lucide="download" aria-hidden="true"></i></button></div>
+        <p class="legal">Grenzen ohne Gewaehr. Keine rechtsverbindliche Auskunft und keine Jagderlaubnis.</p>
+        <section id="profile-section" class="profile-section" aria-label="Revierprofile">
+          <div class="result-heading"><h2>Ergaenzungen</h2><button id="claim-profile" type="button">Als Owner fuehren</button></div>
+          <p id="profile-status" role="status" aria-live="polite">Lade Profile ...</p>
+          <label for="profile-list">Profil fuer dieses Revier</label>
+          <select id="profile-list" aria-label="Profil fuer dieses Revier"></select>
+          <p id="presence-status" role="status" aria-live="polite" hidden></p>
+          <div class="profile-actions">
+            <button id="invite-toggle" type="button" hidden>Benutzer einladen</button>
+            <button id="add-marker" type="button" hidden><i data-lucide="map-pin-plus" aria-hidden="true"></i><span>Markierung setzen</span></button>
+          </div>
+          <form id="invite-form" hidden>
+            <label for="invite-email">E-Mail-Adresse</label>
+            <input id="invite-email" type="email" autocomplete="email" required maxlength="254" placeholder="name@beispiel.de">
+            <button class="primary" type="submit">Einladungslink senden</button>
+          </form>
+          <form id="marker-form" hidden>
+            <p id="marker-coordinates"></p>
+            <label for="marker-type">Objekttyp</label>
+            <select id="marker-type" required></select>
+            <label for="marker-title">Bezeichnung (optional)</label>
+            <input id="marker-title" maxlength="80" placeholder="z. B. Nordseite">
+            <label for="marker-notes">Notiz (optional)</label>
+            <input id="marker-notes" maxlength="300" placeholder="Hinweis fuer die Gruppe">
+            <div class="profile-actions"><button class="primary" type="submit">Markierung speichern</button><button id="cancel-marker" type="button">Abbrechen</button></div>
+          </form>
+        </section>
+      </section>
+      <footer class="source-note"><span>Verfuegbare Abdeckung: konfigurierte Regionen</span><a id="source-link" target="_blank" rel="noopener noreferrer">Datenquelle</a><a id="license-link" target="_blank" rel="noopener noreferrer"></a></footer>
+    </aside>
+    <section class="map-surface" aria-label="Karte">
+      <div id="map" aria-label="OpenStreetMap-Karte"></div>
+      <div class="map-toolbar"><button id="locate" class="icon-button" title="Mein Standort" aria-label="Mein Standort"><i data-lucide="locate-fixed" aria-hidden="true"></i></button><button id="fit" class="icon-button" title="Revier einpassen" aria-label="Revier einpassen" disabled><i data-lucide="scan" aria-hidden="true"></i></button><button id="install" class="icon-button" title="App installieren" aria-label="App installieren" hidden><i data-lucide="monitor-down" aria-hidden="true"></i></button></div>
+      <div class="map-key"><span class="boundary-swatch"></span> Jagdbezirksgrenze</div>
+      <div id="marker-instruction" role="status" hidden>Position fuer die Markierung auf der Karte waehlen.</div>
+      <p id="map-status" role="status" aria-live="polite" hidden></p>
+    </section>
+  </main>
+  <dialog id="login-dialog" aria-labelledby="login-title">
+    <div class="dialog-heading"><h2 id="login-title">Anmelden</h2><button id="close-login" class="icon-button" aria-label="Schliessen" title="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <fieldset id="auth-modes" class="auth-modes"><legend>Kontozugang</legend><label><input type="radio" name="auth-mode" value="login" checked><span>Anmelden</span></label><label><input type="radio" name="auth-mode" value="register"><span>Registrieren</span></label></fieldset>
+    <form id="login-form"><label for="email">E-Mail-Adresse</label><input id="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@beispiel.de"><button id="send-link" class="primary" type="submit"><i data-lucide="mail" aria-hidden="true"></i><span>Anmeldelink senden</span></button></form>
+    <p id="login-status" role="status" aria-live="polite"></p>
+  </dialog>
+  <dialog id="location-consent-dialog" aria-labelledby="location-consent-title">
+    <div class="dialog-heading"><h2 id="location-consent-title">Standortfreigabe</h2></div>
+    <p>Wenn du dieses geteilte Revier auswaehlst, wird dein Standort nur waehrend der Auswahl und nur innerhalb der Reviergrenze an die Mitglieder dieses Revierprofils uebermittelt. Sie sehen deine aktuelle Position. Die Uebermittlung erfolgt alle 30 Sekunden. Beim Verlassen der Grenze oder Abwaehlen wird der gespeicherte Standort geloescht. Ohne Zustimmung nutzt du die Jagdkarte wie ein Gast.</p>
+    <div class="profile-actions"><button id="decline-location" type="button">Als Gast ansehen</button><button id="accept-location" class="primary" type="button">Zustimmen und fortfahren</button></div>
+  </dialog>
+  <noscript>Diese Kartenanwendung benoetigt JavaScript.</noscript>
+</body>
+</html>

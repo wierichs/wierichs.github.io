@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jagdkarte data tests</title>
+</head>
+<body>
+  <h1>Jagdkarte data tests</h1>
+  <pre id="results">Running tests...</pre>
+  <script type="module">
+    import { runDataTests } from './data.test.js';
+
+    const output = document.querySelector('#results');
+    try {
+      const passed = await runDataTests();
+      output.textContent = passed.map(test => `PASS ${test}`).join('\n');
+      document.body.dataset.testResult = 'passed';
+    } catch (error) {
+      output.textContent = `FAIL ${error.message}`;
+      document.body.dataset.testResult = 'failed';
+      console.error(error);
+    }
+  </script>
+</body>
+</html>
