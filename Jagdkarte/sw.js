@@ -1,8 +1,11 @@
-const CACHE = 'jagdkarte-shell-v13';
+const CACHE = 'jagdkarte-shell-v15';
 const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './config.js',
   './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
   './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/sonstiges.svg',
-  '../GeoLocator/leaflet.js', '../GeoLocator/leaflet.css'];
+  './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
+  './vendor/leaflet/images/layers.png', './vendor/leaflet/images/layers-2x.png',
+  './vendor/leaflet/images/marker-icon.png', './vendor/leaflet/images/marker-icon-2x.png',
+  './vendor/leaflet/images/marker-shadow.png'];
 const shellUrls = new Set(SHELL.map(path => new URL(path, self.location).href));
 
 self.addEventListener('install', event => {

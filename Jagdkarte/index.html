@@ -9,9 +9,9 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="stylesheet" href="../GeoLocator/leaflet.css">
+  <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="./style.css">
-  <script defer src="../GeoLocator/leaflet.js"></script>
+  <script defer src="./vendor/leaflet/leaflet.js"></script>
   <script defer src="./lucide.js"></script>
   <script defer src="./supabase.js"></script>
   <script defer src="./config.js"></script>
@@ -27,7 +27,7 @@
     <aside aria-label="Reviersuche">
       <div class="panel-heading"><span class="eyebrow">OFFENE GEODATEN / DEUTSCHLAND</span><h1>Jagdbezirke</h1></div>
       <form id="search-form">
-        <fieldset id="search-fields" disabled>
+        <fieldset id="search-fields">
           <label for="source">Region</label>
           <select id="source"></select>
           <label for="query">Jagdbezirk oder Jagdrevier</label>

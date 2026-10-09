@@ -504,7 +504,10 @@ async function loadSource() {
   element('results').replaceChildren();
   element('result-count').textContent = '0';
   updateSource();
-  if (!currentSource()) return;
+  if (!currentSource()) {
+    status('Bitte zuerst eine Region auswaehlen.');
+    return;
+  }
   const requestController = new AbortController();
   controller = requestController;
   const timeout = setTimeout(() => requestController.abort('timeout'), 30000);
@@ -531,7 +534,9 @@ config.sources.forEach(source => {
   option.textContent = source.label;
   element('source').append(option);
 });
+element('source').selectedIndex = -1;
 updateSource();
+status('Region auswaehlen, um Reviere zu laden.');
 element('source').addEventListener('change', loadSource);
 element('search-form').addEventListener('submit', event => {
   event.preventDefault();
@@ -747,10 +752,13 @@ async function applySession(session) {
     element('profile-status').textContent = 'Melde dich an, um Revierprofile zu sehen.';
     updateProfileControls();
     if (features.length) renderResults();
-    else await loadSource();
+    else if (!currentSource() && !controller) status('Region auswaehlen, um Reviere zu laden.');
   } else if (previousId !== user.id) {
     element('login-dialog').close();
-    await loadSource();
+    if (selected) {
+      element('profile-section').hidden = false;
+      void loadProfiles();
+    }
   }
 }
 
@@ -817,7 +825,7 @@ if (config.supabaseUrl && config.supabasePublishableKey && window.supabase) {
   element('email').disabled = true;
   element('auth-notice').textContent = 'Reviergrenzen sind frei zugaenglich. Der Anmeldedienst fuer Revierprofile ist noch nicht eingerichtet.';
   element('login-status').textContent = 'Supabase-Projektadresse und oeffentlichen Publishable Key in config.js konfigurieren. Es werden keine Anmeldedaten lokal simuliert.';
-  await loadSource();
+  status('Region auswaehlen, um Reviere zu laden.');
 }
 
 function networkState() {

@@ -77,11 +77,14 @@ or sign out first.
 
 ## Data Coverage
 
-The working default is **Bielefeld, Nordrhein-Westfalen**, not all of Germany.
-Its live WFS returned 63 polygon features during browser verification. Search
-matches names, numbers, and scalar attributes, including EJB/GJB codes. Selecting
-a result highlights and fits its polygon; the boundary can be toggled or exported
-as GeoJSON with source and license information.
+Choose a region to load its district data; no regional dataset is fetched before
+the first selection. The app loads only the selected region, and changing the
+region cancels an in-flight request for the previous one. Bielefeld,
+Nordrhein-Westfalen, is one available source; its live WFS returned 63 polygon
+features during browser verification. Search matches names, numbers, and scalar
+attributes, including EJB/GJB codes. Selecting a result highlights and fits its
+polygon; the boundary can be toggled or exported as GeoJSON with source and
+license information.
 
 **Rhein-Kreis Neuss** is also available as a local, searchable snapshot of
 140 district polygons, retrieved on 2026-10-08. Its public portal provides WMS
@@ -237,9 +240,9 @@ asset changes, including authentication configuration. Close existing app tabs
 and reopen after the new worker activates. Other repository apps' caches are
 not modified.
 
-Dependencies are bundled: Supabase JS 2.49.8 and Lucide 0.468.0. Leaflet 1.9.3
-is reused from `../GeoLocator/leaflet.js` and `../GeoLocator/leaflet.css`; include
-those existing files when deploying. Preserve library license notices.
+Dependencies are bundled: Supabase JS 2.49.8, Lucide 0.468.0, and Leaflet 1.9.3
+under `vendor/leaflet/`. Its license and runtime images are included locally, so
+the app does not depend on files from another project directory.
 
 The separate map location button still requests a one-time local position and
 does not store it. Shared-profile tracking requires the consent flow above and
