@@ -29,7 +29,10 @@
       <form id="search-form">
         <fieldset id="search-fields">
           <label for="source">Region</label>
-          <select id="source"></select>
+          <div class="region-row">
+            <select id="source"><option value="" selected disabled>Region waehlen</option></select>
+            <button id="refresh-boundaries" type="button" class="icon-button" title="Reviergrenzen aktualisieren" aria-label="Reviergrenzen aktualisieren" disabled><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
+          </div>
           <label for="query">Jagdbezirk oder Jagdrevier</label>
           <div class="search-row"><input id="query" type="search" placeholder="Name, Revierart oder Nummer" maxlength="120"><button type="submit" class="icon-button primary" title="Suchen" aria-label="Suchen"><i data-lucide="search" aria-hidden="true"></i></button></div>
         </fieldset>
@@ -75,7 +78,7 @@
     <section class="map-surface" aria-label="Karte">
       <div id="map" aria-label="OpenStreetMap-Karte"></div>
       <div class="map-toolbar"><button id="locate" class="icon-button" title="Mein Standort" aria-label="Mein Standort"><i data-lucide="locate-fixed" aria-hidden="true"></i></button><button id="fit" class="icon-button" title="Revier einpassen" aria-label="Revier einpassen" disabled><i data-lucide="scan" aria-hidden="true"></i></button><button id="install" class="icon-button" title="App installieren" aria-label="App installieren" hidden><i data-lucide="monitor-down" aria-hidden="true"></i></button></div>
-      <div class="map-key"><span class="boundary-swatch"></span> Jagdbezirksgrenze</div>
+      <div class="map-key"><span class="boundary-swatch"></span> Jagdbezirksgrenze <span id="location-key" hidden><span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span> Reviermitglied</span></div>
       <div id="marker-instruction" role="status" hidden>Position fuer die Markierung auf der Karte waehlen.</div>
       <p id="map-status" role="status" aria-live="polite" hidden></p>
     </section>

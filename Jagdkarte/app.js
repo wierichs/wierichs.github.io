@@ -1,6 +1,7 @@
-import { loadBoundaries, featureName } from './data.js';
+import { boundaries, loadBoundaries, featureName } from './data.js';
 
 const config = window.JAGDKARTE_CONFIG;
+const boundaryCacheName = 'jagdkarte-boundaries-v1';
 const element = id => document.getElementById(id);
 const map = L.map('map').setView([51.1, 10.4], 6);
 const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -17,6 +18,8 @@ let selected = null;
 let boundary = null;
 let locationLayer = null;
 let controller = null;
+let boundaryLoadRevision = 0;
+let boundaryUpdatedAt = null;
 let installPrompt = null;
 let authRevision = 0;
 let sourceAttribution = '';
@@ -203,14 +206,28 @@ async function loadProfileLocations() {
     .eq('profile_id', activeProfile.id).gte('updated_at', freshAfter);
   if (revision !== presenceRevision || !activeProfile || !user) return;
   profileLocations.clearLayers();
+  element('location-key').hidden = true;
   if (error) {
     element('presence-status').hidden = false;
     element('presence-status').textContent = `Standorte nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
     return;
   }
   (data || []).forEach(location => {
-    const marker = L.circleMarker([location.latitude, location.longitude], {
-      radius: 7, color: '#245743', weight: 2, fillColor: '#e7a52b', fillOpacity: .95
+    const marker = L.marker([location.latitude, location.longitude], {
+      icon: L.divIcon({
+        className: 'profile-location-marker',
+        html: '<span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+      })
+    });
+    marker.on('add', () => {
+      const markerElement = marker.getElement();
+      if (!markerElement) return;
+      markerElement.setAttribute('role', 'img');
+      markerElement.setAttribute('aria-label', `Benutzer ${location.user_id.slice(0, 8)}`);
+      window.lucide?.createIcons({ root: markerElement });
     });
     const popup = document.createElement('div');
     const label = document.createElement('strong');
@@ -220,6 +237,7 @@ async function loadProfileLocations() {
     popup.append(label, time);
     marker.bindPopup(popup).addTo(profileLocations);
   });
+  element('location-key').hidden = !data?.length;
   element('presence-status').hidden = false;
   element('presence-status').textContent = data?.length
     ? `${data.length} aktuelle Standortfreigabe${data.length === 1 ? '' : 'n'} im Revier.`
@@ -386,6 +404,7 @@ function clearSelection() {
   profileRevision += 1;
   profileMarkers.clearLayers();
   profileLocations.clearLayers();
+  element('location-key').hidden = true;
   resetMarkerPlacement();
   element('profile-list').replaceChildren();
   element('profile-list').hidden = true;
@@ -477,7 +496,10 @@ function renderResults() {
     item.append(button);
     element('results').append(item);
   });
-  status(matches.length ? `${matches.length} Reviere${matches.length > 200 ? ', erste 200 angezeigt' : ''}.` : 'Keine passenden Reviere gefunden.');
+  const updated = boundaryUpdatedAt ? ` (Grenzstand ${new Date(boundaryUpdatedAt).toLocaleString('de-DE')})` : '';
+  status(matches.length
+    ? `${matches.length} Reviere${matches.length > 200 ? ', erste 200 angezeigt' : ''}.${updated}`
+    : `Keine passenden Reviere gefunden.${updated}`);
 }
 
 function updateSource() {
@@ -497,35 +519,109 @@ function updateSource() {
   map.attributionControl.addAttribution(sourceAttribution);
 }
 
-async function loadSource() {
-  controller?.abort();
-  clearSelection();
-  features = [];
-  element('results').replaceChildren();
-  element('result-count').textContent = '0';
-  updateSource();
-  if (!currentSource()) {
-    status('Bitte zuerst eine Region auswaehlen.');
-    return;
-  }
+function boundaryCacheRequest(source) {
+  return new Request(new URL(`./__boundary-cache__/${encodeURIComponent(source.id)}.json`, location.href));
+}
+
+async function readBoundaryCache(source) {
+  if (!('caches' in window)) return null;
+  try {
+    const cache = await caches.open(boundaryCacheName);
+    const response = await cache.match(boundaryCacheRequest(source));
+    if (!response) return null;
+    const collection = await response.json();
+    return { features: boundaries(collection), updatedAt: response.headers.get('x-jagdkarte-cached-at') };
+  } catch { return null; }
+}
+
+async function writeBoundaryCache(source, loadedFeatures) {
+  if (!('caches' in window)) return null;
+  try {
+    const updatedAt = new Date().toISOString();
+    const response = new Response(JSON.stringify({ type: 'FeatureCollection', features: loadedFeatures }), {
+      headers: { 'Content-Type': 'application/geo+json', 'X-Jagdkarte-Cached-At': updatedAt }
+    });
+    const cache = await caches.open(boundaryCacheName);
+    await cache.put(boundaryCacheRequest(source), response);
+    return updatedAt;
+  } catch { return null; }
+}
+
+function showBoundaries() {
+  if (features.length) map.fitBounds(L.geoJSON({ type: 'FeatureCollection', features }).getBounds(), { padding: [25, 25], maxZoom: 11 });
+  renderResults();
+}
+
+async function fetchSelectedBoundaries(source, revision) {
   const requestController = new AbortController();
   controller = requestController;
   const timeout = setTimeout(() => requestController.abort('timeout'), 30000);
   element('search-form').setAttribute('aria-busy', 'true');
-  status('Reviergrenzen werden geladen ...');
+  element('refresh-boundaries').disabled = true;
+  status(features.length ? 'Reviergrenzen werden aktualisiert ...' : 'Reviergrenzen werden erstmals geladen ...');
   try {
-    const loaded = await loadBoundaries(currentSource(), requestController.signal);
-    if (controller !== requestController) return;
+    const loaded = await loadBoundaries(source, requestController.signal);
+    if (controller !== requestController || revision !== boundaryLoadRevision) return;
     features = loaded;
-    if (features.length) map.fitBounds(L.geoJSON({ type: 'FeatureCollection', features }).getBounds(), { padding: [25, 25], maxZoom: 11 });
-    renderResults();
+    boundaryUpdatedAt = await writeBoundaryCache(source, loaded) || new Date().toISOString();
+    if (revision === boundaryLoadRevision) showBoundaries();
   } catch (error) {
-    if (controller !== requestController) return;
-    status(requestController.signal.aborted ? 'Zeitueberschreitung. Suche erneut starten.' : `Datenquelle nicht erreichbar: ${error.message}. Verbindung oder CORS-Freigabe pruefen.`);
+    if (controller !== requestController || revision !== boundaryLoadRevision) return;
+    const reason = requestController.signal.aborted
+      ? 'Zeitueberschreitung.'
+      : `Datenquelle nicht erreichbar: ${error.message}.`;
+    status(features.length
+      ? `${reason} Gespeicherte Reviergrenzen bleiben sichtbar.`
+      : `${reason} Verbindung oder CORS-Freigabe pruefen.`);
   } finally {
     clearTimeout(timeout);
-    if (controller === requestController) element('search-form').setAttribute('aria-busy', 'false');
+    if (controller === requestController) {
+      controller = null;
+      element('search-form').setAttribute('aria-busy', 'false');
+      element('refresh-boundaries').disabled = !currentSource();
+    }
   }
+}
+
+async function loadSelectedSource() {
+  const source = currentSource();
+  const revision = ++boundaryLoadRevision;
+  controller?.abort();
+  controller = null;
+  element('search-form').setAttribute('aria-busy', 'false');
+  clearSelection();
+  features = [];
+  boundaryUpdatedAt = null;
+  element('results').replaceChildren();
+  element('result-count').textContent = '0';
+  updateSource();
+  element('refresh-boundaries').disabled = !source;
+  if (!source) {
+    status('Bitte zuerst eine Region auswaehlen.');
+    return;
+  }
+  status('Gespeicherte Reviergrenzen werden gesucht ...');
+  const cached = await readBoundaryCache(source);
+  if (revision !== boundaryLoadRevision || currentSource()?.id !== source.id) return;
+  if (cached?.features.length) {
+    features = cached.features;
+    boundaryUpdatedAt = cached.updatedAt;
+    showBoundaries();
+    return;
+  }
+  await fetchSelectedBoundaries(source, revision);
+}
+
+function refreshSelectedSource() {
+  const source = currentSource();
+  if (!source) {
+    status('Bitte zuerst eine Region auswaehlen.');
+    return;
+  }
+  const revision = ++boundaryLoadRevision;
+  controller?.abort();
+  clearSelection();
+  void fetchSelectedBoundaries(source, revision);
 }
 
 config.sources.forEach(source => {
@@ -534,13 +630,17 @@ config.sources.forEach(source => {
   option.textContent = source.label;
   element('source').append(option);
 });
-element('source').selectedIndex = -1;
 updateSource();
 status('Region auswaehlen, um Reviere zu laden.');
-element('source').addEventListener('change', loadSource);
+element('refresh-boundaries').disabled = true;
+element('source').addEventListener('change', loadSelectedSource);
+element('refresh-boundaries').addEventListener('click', refreshSelectedSource);
 element('search-form').addEventListener('submit', event => {
   event.preventDefault();
-  if (features.length) renderResults(); else loadSource();
+  if (features.length) renderResults();
+  else status(currentSource()
+    ? 'Reviergrenzen werden geladen. Bitte kurz warten oder Aktualisieren auswaehlen.'
+    : 'Bitte zuerst eine Region auswaehlen.');
 });
 element('query').addEventListener('input', () => { if (features.length) renderResults(); });
 element('clear').addEventListener('click', clearSelection);

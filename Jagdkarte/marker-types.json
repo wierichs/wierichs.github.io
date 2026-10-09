@@ -19,6 +19,38 @@
       "popupAnchor": [0, -42]
     },
     {
+      "id": "leiter",
+      "label": "Leiter",
+      "iconUrl": "./markers/leiter.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
+      "id": "kanzel",
+      "label": "Kanzel",
+      "iconUrl": "./markers/kanzel.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
+      "id": "drueckjagdbock",
+      "label": "Drückjagdbock",
+      "iconUrl": "./markers/drueckjagdbock.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
+      "id": "kirrung",
+      "label": "Kirrung",
+      "iconUrl": "./markers/kirrung.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
       "id": "sonstiges",
       "label": "Sonstiges",
       "iconUrl": "./markers/sonstiges.svg",

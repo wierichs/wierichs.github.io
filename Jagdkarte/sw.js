@@ -1,11 +1,12 @@
-const CACHE = 'jagdkarte-shell-v15';
+const CACHE = 'jagdkarte-shell-v18';
 const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './config.js',
   './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
-  './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/sonstiges.svg',
+  './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/leiter.svg',
+  './markers/kanzel.svg', './markers/drueckjagdbock.svg', './markers/kirrung.svg', './markers/sonstiges.svg',
   './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
   './vendor/leaflet/images/layers.png', './vendor/leaflet/images/layers-2x.png',
   './vendor/leaflet/images/marker-icon.png', './vendor/leaflet/images/marker-icon-2x.png',
-  './vendor/leaflet/images/marker-shadow.png'];
+  './vendor/leaflet/images/marker-shadow.png', './vendor/leaflet/LICENSE'];
 const shellUrls = new Set(SHELL.map(path => new URL(path, self.location).href));
 
 self.addEventListener('install', event => {
