@@ -5,6 +5,7 @@
   "lang": "de",
   "start_url": "./",
   "scope": "./",
+  "handle_links": "preferred",
   "display": "standalone",
   "background_color": "#f4f6f5",
   "theme_color": "#245743",

@@ -4,6 +4,7 @@ const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
 const element = id => document.getElementById(id);
 const map = L.map('map').setView([51.1, 10.4], 6);
+const mapSurface = element('map-surface');
 const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -645,6 +646,37 @@ element('search-form').addEventListener('submit', event => {
 element('query').addEventListener('input', () => { if (features.length) renderResults(); });
 element('clear').addEventListener('click', clearSelection);
 element('fit').addEventListener('click', () => { if (boundary) map.fitBounds(boundary.getBounds(), { padding: [24, 24], maxZoom: 16 }); });
+function syncMapFullscreen() {
+  const fullscreen = document.fullscreenElement === mapSurface || mapSurface.classList.contains('is-fullscreen');
+  const label = fullscreen ? 'Vollbild beenden' : 'Karte im Vollbild anzeigen';
+  element('fullscreen-map').title = label;
+  element('fullscreen-map').setAttribute('aria-label', label);
+  element('fullscreen-map').setAttribute('aria-pressed', String(fullscreen));
+  element('fullscreen-enter-icon').hidden = fullscreen;
+  element('fullscreen-exit-icon').hidden = !fullscreen;
+  requestAnimationFrame(() => map.invalidateSize());
+}
+element('fullscreen-map').addEventListener('click', async () => {
+  if (document.fullscreenElement === mapSurface) {
+    await document.exitFullscreen();
+  } else if (mapSurface.classList.contains('is-fullscreen')) {
+    mapSurface.classList.remove('is-fullscreen');
+    syncMapFullscreen();
+  } else if (mapSurface.requestFullscreen) {
+    try { await mapSurface.requestFullscreen(); }
+    catch { mapSurface.classList.add('is-fullscreen'); syncMapFullscreen(); }
+  } else {
+    mapSurface.classList.add('is-fullscreen');
+    syncMapFullscreen();
+  }
+});
+document.addEventListener('fullscreenchange', syncMapFullscreen);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !document.fullscreenElement && mapSurface.classList.contains('is-fullscreen')) {
+    mapSurface.classList.remove('is-fullscreen');
+    syncMapFullscreen();
+  }
+});
 element('show-boundary').addEventListener('change', event => {
   if (!boundary) return;
   if (event.target.checked) boundary.addTo(map); else map.removeLayer(boundary);
@@ -898,8 +930,8 @@ element('login-form').addEventListener('submit', async event => {
     element('login-status').textContent = error
       ? `${registering ? 'Registrierung' : 'Anmeldung'} fehlgeschlagen: ${error.message}`
       : registering
-        ? 'Registrierungs-E-Mail angefordert. Bitte den Link auf diesem Geraet oeffnen, um die E-Mail-Adresse zu bestaetigen; auch den Spamordner pruefen.'
-        : 'E-Mail angefordert. Bitte den Anmeldelink auf diesem Geraet oeffnen; auch den Spamordner pruefen.';
+        ? 'Registrierungs-E-Mail angefordert. Bitte den Link im selben Browserprofil oeffnen, um die E-Mail-Adresse zu bestaetigen; auch den Spamordner pruefen.'
+        : 'E-Mail angefordert. Bitte den Anmeldelink im selben Browserprofil oeffnen; auch den Spamordner pruefen.';
   } catch { element('login-status').textContent = 'Anmeldedienst nicht erreichbar. Bitte erneut versuchen.'; }
   finally {
     authPending = false;
@@ -913,7 +945,9 @@ element('login-form').addEventListener('submit', async event => {
 if (config.supabaseUrl && config.supabasePublishableKey && window.supabase) {
   try { await loadMarkerTypes(); }
   catch (error) { profileStatus(`Objekttyp-Konfiguration konnte nicht geladen werden: ${error.message}`); }
-  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, { auth: { flowType: 'pkce' } });
+  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
+    auth: { flowType: 'pkce', persistSession: true }
+  });
   auth = supabaseClient.auth;
   auth.onAuthStateChange((_event, session) => { setTimeout(() => applySession(session), 0); });
   const { data, error } = await auth.getSession();

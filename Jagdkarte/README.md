@@ -19,9 +19,14 @@ The repository home page links to the app. No build step is required.
    policy; disable new signups in Supabase for an invitation-only application.
 5. Open the account dialog and choose **Registrieren** for a new account or
    **Anmelden** for an existing account. Enter an email address, request the link,
-   and open it on the same browser/device to verify ownership of the address.
-   The SDK uses PKCE and verifies the session before enabling private profiles
-   and user-created markers.
+   and open it in the same browser profile to verify ownership of the address.
+   The manifest asks supporting browsers to open in-scope links in the installed
+   PWA when possible. Link capture depends on browser and operating-system
+   support and settings; a web app cannot force every email client to open it.
+   The SDK uses PKCE, so the browser profile that requested the link must also
+   complete it before private profiles and user-created markers are enabled.
+   The verified session is kept in that browser profile between app launches
+   until the user signs out, clears browser storage, or the session is revoked.
 
 Registration is passwordless: Supabase creates and manages the account and sends
 the verification link. No passwords or account database are stored by this app.
