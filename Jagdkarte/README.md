@@ -18,15 +18,25 @@ The repository home page links to the app. No build step is required.
    restrictions and rate limits. Account creation follows the project's signup
    policy; disable new signups in Supabase for an invitation-only application.
 5. Open the account dialog and choose **Registrieren** for a new account or
-   **Anmelden** for an existing account. Enter an email address, request the link,
-   and open it in the same browser profile to verify ownership of the address.
-   The manifest asks supporting browsers to open in-scope links in the installed
-   PWA when possible. Link capture depends on browser and operating-system
-   support and settings; a web app cannot force every email client to open it.
-   The SDK uses PKCE, so the browser profile that requested the link must also
-   complete it before private profiles and user-created markers are enabled.
-   The verified session is kept in that browser profile between app launches
-   until the user signs out, clears browser storage, or the session is revoked.
+   **Anmelden** for an existing account. Enter an email address and request a link.
+6. In Supabase **Authentication > Email Templates**, update both **Magic Link**
+   and **Confirm Signup** so each link points directly to the app and carries the
+   one-time token hash. Replace the template's `{{ .ConfirmationURL }}` link with:
+
+   ```html
+   <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=email">Link oeffnen</a>
+   ```
+
+   The app verifies this callback using `verifyOtp`, then removes the token from
+   the address bar. The URL passed by the app is allowlisted in step 3. Keep the
+   token hash in the link; never put an access token, refresh token, or service
+   role key in an email. Link capture still depends on Android, browser, and mail
+   app settings; `handle_links` is a preference, not a guarantee.
+
+The verified session is kept in the browser profile that opened the callback
+between app launches until the user signs out, clears browser storage, or the
+session is revoked. The standard Supabase callback still uses PKCE; the direct
+TokenHash callback verifies the one-time email token in the app context.
 
 Registration is passwordless: Supabase creates and manages the account and sends
 the verification link. No passwords or account database are stored by this app.

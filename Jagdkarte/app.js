@@ -930,8 +930,8 @@ element('login-form').addEventListener('submit', async event => {
     element('login-status').textContent = error
       ? `${registering ? 'Registrierung' : 'Anmeldung'} fehlgeschlagen: ${error.message}`
       : registering
-        ? 'Registrierungs-E-Mail angefordert. Bitte den Link im selben Browserprofil oeffnen, um die E-Mail-Adresse zu bestaetigen; auch den Spamordner pruefen.'
-        : 'E-Mail angefordert. Bitte den Anmeldelink im selben Browserprofil oeffnen; auch den Spamordner pruefen.';
+        ? 'Registrierungs-E-Mail angefordert. Bitte den Link oeffnen, um die E-Mail-Adresse zu bestaetigen; auch den Spamordner pruefen.'
+        : 'E-Mail angefordert. Bitte den Anmeldelink oeffnen; auch den Spamordner pruefen.';
   } catch { element('login-status').textContent = 'Anmeldedienst nicht erreichbar. Bitte erneut versuchen.'; }
   finally {
     authPending = false;
@@ -950,6 +950,35 @@ if (config.supabaseUrl && config.supabasePublishableKey && window.supabase) {
   });
   auth = supabaseClient.auth;
   auth.onAuthStateChange((_event, session) => { setTimeout(() => applySession(session), 0); });
+  const callbackUrl = new URL(location.href);
+  const tokenHash = callbackUrl.searchParams.get('token_hash');
+  if (tokenHash) {
+    const tokenType = callbackUrl.searchParams.get('type');
+    callbackUrl.searchParams.delete('token_hash');
+    callbackUrl.searchParams.delete('type');
+    history.replaceState(history.state, '', `${callbackUrl.pathname}${callbackUrl.search}${callbackUrl.hash}`);
+    element('login-dialog').showModal();
+    if (tokenType !== 'email') {
+      element('login-status').textContent = 'Der Anmeldelink ist ungueltig oder wird nicht unterstuetzt.';
+    } else {
+      element('login-status').textContent = 'Anmeldelink wird bestaetigt ...';
+      try {
+        const { data: verification, error: verificationError } = await auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'email'
+        });
+        if (verificationError) {
+          element('login-status').textContent = `Anmeldelink ungueltig oder abgelaufen: ${verificationError.message}`;
+        } else {
+          await applySession(verification.session);
+          element('login-dialog').close();
+          element('login-status').textContent = 'Anmeldung erfolgreich.';
+        }
+      } catch {
+        element('login-status').textContent = 'Anmeldedienst nicht erreichbar. Bitte erneut versuchen.';
+      }
+    }
+  }
   const { data, error } = await auth.getSession();
   if (error) element('login-status').textContent = error.message;
   await applySession(data.session);
