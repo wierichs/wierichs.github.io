@@ -80,7 +80,7 @@
       <div class="map-toolbar"><button id="locate" class="icon-button" title="Mein Standort" aria-label="Mein Standort"><i data-lucide="locate-fixed" aria-hidden="true"></i></button><button id="fit" class="icon-button" title="Revier einpassen" aria-label="Revier einpassen" disabled><i data-lucide="scan" aria-hidden="true"></i></button><button id="fullscreen-map" class="icon-button" type="button" title="Karte im Vollbild anzeigen" aria-label="Karte im Vollbild anzeigen" aria-pressed="false"><i id="fullscreen-enter-icon" data-lucide="expand" aria-hidden="true"></i><i id="fullscreen-exit-icon" data-lucide="minimize-2" aria-hidden="true" hidden></i></button><button id="install" class="icon-button" title="App installieren" aria-label="App installieren" hidden><i data-lucide="monitor-down" aria-hidden="true"></i></button></div>
       <div class="map-key"><span class="boundary-swatch"></span> Jagdbezirksgrenze <span id="location-key" hidden><span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span> Reviermitglied</span></div>
       <div id="marker-instruction" role="status" hidden>Position fuer die Markierung auf der Karte waehlen.</div>
-      <p id="map-status" role="status" aria-live="polite" hidden></p>
+      <div id="map-status" hidden><span id="map-status-text" role="status" aria-live="polite"></span><button id="close-map-status" class="icon-button" type="button" title="Meldung schliessen" aria-label="Meldung schliessen" hidden><i data-lucide="x" aria-hidden="true"></i></button></div>
     </section>
   </main>
   <dialog id="login-dialog" aria-labelledby="login-title">

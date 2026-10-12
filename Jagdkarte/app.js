@@ -25,6 +25,7 @@ let installPrompt = null;
 let authRevision = 0;
 let sourceAttribution = '';
 let tileWarningShown = false;
+let mapStatusTimer = null;
 let profiles = [];
 let activeProfile = null;
 let placementMode = false;
@@ -48,11 +49,26 @@ window.lucide?.createIcons();
 new ResizeObserver(() => map.invalidateSize()).observe(element('map'));
 tiles.on('tileerror', () => {
   if (!tileWarningShown) {
-    element('map-status').textContent = 'Hintergrundkarte nicht verfuegbar. Internetverbindung pruefen.';
-    element('map-status').hidden = false;
+    showMapStatus('Hintergrundkarte nicht verfuegbar. Internetverbindung pruefen.', 'error');
     tileWarningShown = true;
   }
 });
+
+function hideMapStatus() {
+  clearTimeout(mapStatusTimer);
+  mapStatusTimer = null;
+  element('map-status').hidden = true;
+}
+
+function showMapStatus(message, type = 'info') {
+  hideMapStatus();
+  element('map-status-text').textContent = message;
+  element('close-map-status').hidden = type !== 'error';
+  element('map-status').hidden = false;
+  if (type === 'info') mapStatusTimer = setTimeout(hideMapStatus, 3000);
+}
+
+element('close-map-status').addEventListener('click', hideMapStatus);
 
 function currentSource() { return config.sources.find(source => source.id === element('source').value); }
 function status(message) { element('status').textContent = message; }
@@ -832,18 +848,17 @@ element('download').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 element('locate').addEventListener('click', () => {
-  const message = element('map-status');
-  message.hidden = false;
-  message.textContent = 'Standort wird bestimmt ...';
-  if (!navigator.geolocation) { message.textContent = 'Standortbestimmung nicht verfuegbar.'; return; }
+  showMapStatus('Standort wird bestimmt ...', 'pending');
+  if (!navigator.geolocation) { showMapStatus('Standortbestimmung nicht verfuegbar.', 'error'); return; }
   navigator.geolocation.getCurrentPosition(position => {
     const coordinates = [position.coords.latitude, position.coords.longitude];
     if (locationLayer) map.removeLayer(locationLayer);
+    const accuracyText = `Standortgenauigkeit: ${Math.round(position.coords.accuracy)} m`;
     locationLayer = L.featureGroup([L.circle(coordinates, { radius: position.coords.accuracy, color: '#257aa5', weight: 1 }),
-      L.circleMarker(coordinates, { radius: 6, color: '#fff', weight: 2, fillColor: '#257aa5', fillOpacity: 1 })]).addTo(map);
+      L.circleMarker(coordinates, { radius: 6, color: '#fff', weight: 2, fillColor: '#257aa5', fillOpacity: 1 }).bindPopup(accuracyText)]).addTo(map);
     map.setView(coordinates, 14);
-    message.textContent = `Standortgenauigkeit: ${Math.round(position.coords.accuracy)} m`;
-  }, error => { message.textContent = error.code === 1 ? 'Standortzugriff nicht erlaubt.' : 'Standort konnte nicht bestimmt werden.'; }, { timeout: 15000, maximumAge: 60000 });
+    showMapStatus(accuracyText);
+  }, error => { showMapStatus(error.code === 1 ? 'Standortzugriff nicht erlaubt.' : 'Standort konnte nicht bestimmt werden.', 'error'); }, { timeout: 15000, maximumAge: 60000 });
 });
 
 async function applySession(session) {
@@ -1002,5 +1017,5 @@ window.addEventListener('beforeinstallprompt', event => { event.preventDefault()
 element('install').addEventListener('click', async () => { if (!installPrompt) return; await installPrompt.prompt(); installPrompt = null; element('install').hidden = true; });
 window.addEventListener('appinstalled', () => { installPrompt = null; element('install').hidden = true; });
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => { element('map-status').textContent = 'Offline-App konnte nicht eingerichtet werden.'; element('map-status').hidden = false; });
+  navigator.serviceWorker.register('./sw.js').catch(() => { showMapStatus('Offline-App konnte nicht eingerichtet werden.', 'error'); });
 }
