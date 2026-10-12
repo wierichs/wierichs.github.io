@@ -14,6 +14,7 @@ let user = null;
 let auth = null;
 let supabaseClient = null;
 let authPending = false;
+let requestedEmail = null;
 let features = [];
 let selected = null;
 let boundary = null;
@@ -999,41 +1000,92 @@ element('account-button').addEventListener('click', async () => {
   } else element('login-dialog').showModal();
 });
 element('close-login').addEventListener('click', () => element('login-dialog').close());
+function resetEmailCode() {
+  requestedEmail = null;
+  element('code-form').hidden = true;
+  element('email-code').value = '';
+  const registering = document.querySelector('input[name="auth-mode"]:checked').value === 'register';
+  element('send-link').querySelector('span').textContent = registering ? 'Registrierungscode senden' : 'Anmeldecode senden';
+}
+
+function setAuthPending(pending) {
+  authPending = pending;
+  element('send-link').disabled = pending;
+  element('email').disabled = pending;
+  element('auth-modes').disabled = pending;
+  element('verify-code').disabled = pending;
+  element('email-code').disabled = pending;
+  element('login-form').setAttribute('aria-busy', String(pending));
+  element('code-form').setAttribute('aria-busy', String(pending));
+}
+
+element('email').addEventListener('input', () => {
+  resetEmailCode();
+  element('login-status').textContent = '';
+});
 element('auth-modes').addEventListener('change', () => {
   const registering = document.querySelector('input[name="auth-mode"]:checked').value === 'register';
   element('login-title').textContent = registering ? 'Registrieren' : 'Anmelden';
-  element('send-link').querySelector('span').textContent = registering ? 'Registrierungslink senden' : 'Anmeldelink senden';
+  resetEmailCode();
   if (auth) element('login-status').textContent = '';
 });
 element('login-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!auth || authPending) return;
+  if (!auth || authPending || !element('login-form').reportValidity()) return;
   const registering = document.querySelector('input[name="auth-mode"]:checked').value === 'register';
   const email = element('email').value.trim();
-  authPending = true;
-  element('send-link').disabled = true;
-  element('email').disabled = true;
-  element('auth-modes').disabled = true;
-  element('login-form').setAttribute('aria-busy', 'true');
-  element('login-status').textContent = registering ? 'Registrierungslink wird angefordert ...' : 'Anmeldelink wird angefordert ...';
+  setAuthPending(true);
+  element('login-status').textContent = registering ? 'Registrierungscode wird angefordert ...' : 'Anmeldecode wird angefordert ...';
   try {
     const redirect = new URL('./', location.href);
     const { error } = await auth.signInWithOtp({ email, options: {
       emailRedirectTo: redirect.href,
       shouldCreateUser: registering
     } });
-    element('login-status').textContent = error
-      ? `${registering ? 'Registrierung' : 'Anmeldung'} fehlgeschlagen: ${error.message}`
-      : registering
-        ? 'Registrierungs-E-Mail angefordert. Bitte den Link oeffnen, um die E-Mail-Adresse zu bestaetigen; auch den Spamordner pruefen.'
-        : 'E-Mail angefordert. Bitte den Anmeldelink oeffnen; auch den Spamordner pruefen.';
+    if (error) {
+      element('login-status').textContent = `${registering ? 'Registrierung' : 'Anmeldung'} fehlgeschlagen: ${error.message}`;
+    } else {
+      requestedEmail = email;
+      element('email-code').value = '';
+      element('code-form').hidden = false;
+      element('send-link').querySelector('span').textContent = 'Code erneut senden';
+      element('login-status').textContent = registering ? 'Registrierungs-E-Mail angefordert.' : 'E-Mail angefordert.';
+    }
   } catch { element('login-status').textContent = 'Anmeldedienst nicht erreichbar. Bitte erneut versuchen.'; }
   finally {
-    authPending = false;
-    element('send-link').disabled = false;
-    element('email').disabled = false;
-    element('auth-modes').disabled = false;
-    element('login-form').setAttribute('aria-busy', 'false');
+    setAuthPending(false);
+    if (requestedEmail) element('email-code').focus();
+  }
+});
+
+element('code-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!auth || authPending || !requestedEmail || !element('code-form').reportValidity()) return;
+  const email = requestedEmail;
+  const token = element('email-code').value;
+  setAuthPending(true);
+  element('login-status').textContent = 'E-Mail-Code wird bestaetigt ...';
+  try {
+    const { data, error } = await auth.verifyOtp({ email, token, type: 'email' });
+    if (error) {
+      element('login-status').textContent = `Code ungueltig oder abgelaufen: ${error.message}`;
+    } else if (!data?.session) {
+      element('login-status').textContent = 'Anmeldung konnte nicht bestaetigt werden.';
+    } else {
+      await applySession(data.session);
+      if (user) {
+        resetEmailCode();
+        element('login-dialog').close();
+        element('login-status').textContent = 'Anmeldung erfolgreich.';
+      } else {
+        element('login-status').textContent = 'Sitzung konnte nicht verifiziert werden. Bitte erneut versuchen.';
+      }
+    }
+  } catch {
+    element('login-status').textContent = 'Anmeldedienst nicht erreichbar. Bitte erneut versuchen.';
+  } finally {
+    setAuthPending(false);
+    if (requestedEmail) element('email-code').focus();
   }
 });
 

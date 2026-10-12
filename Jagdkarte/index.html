@@ -86,7 +86,8 @@
   <dialog id="login-dialog" aria-labelledby="login-title">
     <div class="dialog-heading"><h2 id="login-title">Anmelden</h2><button id="close-login" class="icon-button" aria-label="Schliessen" title="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
     <fieldset id="auth-modes" class="auth-modes"><legend>Kontozugang</legend><label><input type="radio" name="auth-mode" value="login" checked><span>Anmelden</span></label><label><input type="radio" name="auth-mode" value="register"><span>Registrieren</span></label></fieldset>
-    <form id="login-form"><label for="email">E-Mail-Adresse</label><input id="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@beispiel.de"><button id="send-link" class="primary" type="submit"><i data-lucide="mail" aria-hidden="true"></i><span>Anmeldelink senden</span></button></form>
+    <form id="login-form"><label for="email">E-Mail-Adresse</label><input id="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@beispiel.de"><button id="send-link" class="primary" type="submit"><i data-lucide="mail" aria-hidden="true"></i><span>Anmeldecode senden</span></button></form>
+    <form id="code-form" hidden><label for="email-code">E-Mail-Code</label><input id="email-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" minlength="6" maxlength="10" required><button id="verify-code" class="primary" type="submit"><i data-lucide="shield-check" aria-hidden="true"></i><span>Bestaetigen</span></button></form>
     <p id="login-status" role="status" aria-live="polite"></p>
   </dialog>
   <dialog id="location-consent-dialog" aria-labelledby="location-consent-title">

@@ -18,7 +18,7 @@ The repository home page links to the app. No build step is required.
    restrictions and rate limits. Account creation follows the project's signup
    policy; disable new signups in Supabase for an invitation-only application.
 5. Open the account dialog and choose **Registrieren** for a new account or
-   **Anmelden** for an existing account. Enter an email address and request a link.
+   **Anmelden** for an existing account. Enter an email address and request a code.
 6. In Supabase **Authentication > Email Templates**, update both **Magic Link**
    and **Confirm Signup** so each link points directly to the app and carries the
    one-time token hash. Replace the template's `{{ .ConfirmationURL }}` link with:
@@ -27,11 +27,26 @@ The repository home page links to the app. No build step is required.
    <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=email">Link oeffnen</a>
    ```
 
+   Include the one-time code in both templates as well:
+
+   ```html
+   <p>Dein Anmeldecode: {{ .Token }}</p>
+   ```
+
    The app verifies this callback using `verifyOtp`, then removes the token from
    the address bar. The URL passed by the app is allowlisted in step 3. Keep the
    token hash in the link; never put an access token, refresh token, or service
    role key in an email. Link capture still depends on Android, browser, and mail
    app settings; `handle_links` is a preference, not a guarantee.
+
+After the email request succeeds, the dialog offers **E-Mail-Code** and
+**Bestaetigen**. Code verification uses `verifyOtp({ email, token, type: 'email' })`
+with the address from that successful request. Changing the address or switching
+between login and registration resets the code step. **Code erneut senden**
+requests another email and clears the entered code on success. Failed requests
+and invalid/expired codes leave the dialog available for retry. Codes are never
+stored in browser storage or application logs. The email link remains an
+alternative; code and link use the same one-time token and cannot both be reused.
 
 The verified session is kept in the browser profile that opened the callback
 between app launches until the user signs out, clears browser storage, or the

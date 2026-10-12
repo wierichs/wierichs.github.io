@@ -91,7 +91,8 @@ dialog::backdrop { background: #152a2260; }
 .auth-modes input:checked + span { background: var(--green); color: white; }
 .auth-modes input:focus-visible + span { outline: 3px solid #e7a52b; outline-offset: -3px; }
 .auth-modes input:disabled + span { opacity: .6; cursor: not-allowed; }
-#login-form { margin-top: 20px; } #login-form button { width: 100%; margin-top: 16px; }
+#login-form, #code-form { margin-top: 20px; }
+#login-form button, #code-form button { width: 100%; margin-top: 16px; }
 #login-status { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 #location-consent-dialog p { font-size: 14px; line-height: 1.6; }
 #location-consent-dialog .profile-actions { justify-content: flex-end; }
