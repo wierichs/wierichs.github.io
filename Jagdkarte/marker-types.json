@@ -51,6 +51,40 @@
       "popupAnchor": [0, -42]
     },
     {
+      "id": "falle",
+      "label": "Falle",
+      "iconUrl": "./markers/falle.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
+      "id": "wildkamera",
+      "label": "Wildkamera",
+      "iconUrl": "./markers/wildkamera.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
+      "id": "anschuss",
+      "label": "Anschuss",
+      "temporary": true,
+      "iconUrl": "./markers/anschuss.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
+      "id": "wildsichtung",
+      "label": "Wildsichtung",
+      "temporary": true,
+      "iconUrl": "./markers/wildsichtung.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
       "id": "sonstiges",
       "label": "Sonstiges",
       "iconUrl": "./markers/sonstiges.svg",

@@ -63,19 +63,42 @@ security policies in `schema.sql`.
 Run `schema.sql` once in the Supabase Dashboard SQL Editor for this project.
 It creates the profile, member, invitation, and marker tables, their RLS
 policies, and the RPC functions used by the app. It is additive and can be run
-again safely. Rerun it after updating the app so the location table and its RLS
-policies are installed. Do not disable RLS or grant access to the `anon` role.
+again safely. Rerun it after updating the app so the location table, temporary
+markers, expiry job, and their RLS policies are installed. Enable PostGIS in the
+`extensions` schema and pg_cron in Supabase before running it if they are not
+already available. Do not disable RLS or grant access to the `anon` role.
 
 After signing in, select a district and choose **Als Owner fuehren** to create
 your profile. A district can have separate profiles for different owners; each
 signed-in user has at most one profile per district. Choose a point inside the
 district boundary and add a label and optional note. The owner can invite an
 email address; Supabase sends a passwordless sign-in/registration link, and the
-invited user receives read-only access to that profile after verifying the
+invited user receives access to that profile after verifying the
 same address. Owner profiles and markers remain independent from other owners'
-profiles for the same district. Invitees cannot add, edit, or delete markers.
+profiles for the same district. Only owners can create and delete permanent
+markers. Owners and invited members can create **Anschuss** and **Wildsichtung**
+markers while their current browser-reported location is inside the district.
+Members can also delete their own temporary markers; owners can delete any marker.
 When an invitee selects a shared profile, the app asks for explicit location consent before requesting browser geolocation. Declining, or denying browser permission, leaves the public district visible in guest mode without profile data. With consent, the first fix is sent immediately and the location is refreshed every 30 seconds only while it is inside the selected polygon. The owner and invited members of that profile can see one another; their maps also refresh every 30 seconds. Entries older than 90 seconds are not displayed. Leaving the polygon, changing profiles, or
 signing out removes the user's location row when the app can reach Supabase.
+
+Temporary markers expire 48 hours after creation according to the database clock.
+RLS immediately hides expired rows; a pg_cron job deletes them every minute even
+when nobody has the app open. Open maps remove each marker at its expiry time and
+refresh profile markers every 30 seconds (except while a marker popup is open).
+Creating a temporary marker always requests a fresh GPS fix, independent of the
+periodic location-sharing fix. The RPC checks membership, the submitted current
+position, and the marker position against the boundary stored by the owner.
+These current coordinates are used for the check, not stored as an additional
+location-sharing entry. Browser geolocation can be spoofed and is not proof of
+physical presence. An owner can manage the stored boundary, so this is a private
+profile constraint, not verification against an independent official boundary.
+
+For existing profiles, the owner must open the district/profile once after the
+schema update to register its boundary. Until then, temporary creation fails
+closed with an explanatory error. `delete-expired-hunting-markers` is the named
+cron job; check its execution history in Supabase after applying the schema.
+The browser and mocked API checks do not replace a real owner/member RLS test.
 
 Available marker types are defined in `marker-types.json`. Each type has a
 stable lowercase `id`, display `label`, local SVG `iconUrl`, and Leaflet icon

@@ -30,6 +30,8 @@ let profiles = [];
 let activeProfile = null;
 let placementMode = false;
 let markerCoordinates = null;
+let markerPending = false;
+let markerExpiryTimers = [];
 let profileRevision = 0;
 let markerTypes = [];
 let markerTypesById = new Map();
@@ -97,7 +99,14 @@ function updateProfileControls() {
   const canCreate = Boolean(user && selected && selectedFeatureId());
   element('claim-profile').hidden = !canCreate || profiles.some(profile => profile.owner_id === user.id);
   element('invite-toggle').hidden = !ownProfile;
-  element('add-marker').hidden = !ownProfile || markerTypes.length === 0;
+  const availableTypes = markerTypes.filter(type => ownProfile || type.temporary);
+  element('add-marker').hidden = !user || !activeProfile || availableTypes.length === 0;
+  const select = element('marker-type');
+  Array.from(select.options).forEach(option => {
+    option.disabled = !ownProfile && !markerTypesById.get(option.value)?.temporary;
+    option.hidden = option.disabled;
+  });
+  if (select.selectedOptions[0]?.disabled) select.value = availableTypes[0]?.id || '';
 }
 
 async function loadMarkerTypes() {
@@ -138,19 +147,37 @@ async function loadMarkerTypes() {
   select.value = fallbackMarkerType;
 }
 
+function clearProfileMarkers() {
+  markerExpiryTimers.forEach(timer => clearTimeout(timer));
+  markerExpiryTimers = [];
+  profileMarkers.clearLayers();
+}
+
+async function registerProfileBoundary(profile) {
+  if (profile.owner_id !== user?.id || !selected) return;
+  const { error } = await supabaseClient.rpc('set_hunting_profile_boundary', {
+    p_profile_id: profile.id, p_geometry: selected.geometry
+  });
+  if (error) profileStatus(`Reviergrenze konnte nicht hinterlegt werden: ${error.message}. Datenbankschema aktualisieren.`);
+}
+
 async function loadProfileMarkers() {
   const revision = ++profileRevision;
-  profileMarkers.clearLayers();
+  clearProfileMarkers();
   if (!supabaseClient || !activeProfile || !user) return;
+  const profileId = activeProfile.id;
+  const userId = user.id;
   const { data, error } = await supabaseClient.from('hunting_markers')
-    .select('id,type_id,title,notes,latitude,longitude,created_by')
+    .select('id,type_id,title,notes,latitude,longitude,created_by,created_at,expires_at')
     .eq('profile_id', activeProfile.id).order('created_at');
-  if (revision !== profileRevision) return;
+  if (revision !== profileRevision || activeProfile?.id !== profileId || user?.id !== userId) return;
   if (error) {
     profileStatus(`Markierungen konnten nicht geladen werden: ${error.message}`);
     return;
   }
   (data || []).forEach(marker => {
+    const expiresAt = marker.expires_at ? new Date(marker.expires_at).getTime() : null;
+    if (expiresAt !== null && (!Number.isFinite(expiresAt) || expiresAt <= Date.now())) return;
     const type = markerTypesById.get(marker.type_id) || markerTypesById.get(fallbackMarkerType);
     const popup = document.createElement('div');
     popup.className = 'profile-marker-popup';
@@ -167,7 +194,12 @@ async function loadProfileMarkers() {
       notes.textContent = marker.notes;
       popup.append(notes);
     }
-    if (activeProfile.owner_id === user.id) {
+    if (expiresAt !== null) {
+      const expiry = document.createElement('span');
+      expiry.textContent = `Gueltig bis ${new Date(expiresAt).toLocaleString('de-DE')}`;
+      popup.append(expiry);
+    }
+    if (activeProfile.owner_id === user.id || (type.temporary && marker.created_by === user.id)) {
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = 'Markierung loeschen';
@@ -193,8 +225,19 @@ async function loadProfileMarkers() {
       if (iconElement) iconElement.setAttribute('aria-label', type.label);
     });
     mapMarker.addTo(profileMarkers);
+    if (expiresAt !== null) {
+      markerExpiryTimers.push(setTimeout(() => profileMarkers.removeLayer(mapMarker), Math.max(0, expiresAt - Date.now())));
+    }
   });
 }
+
+setInterval(() => {
+  if (activeProfile && user && !document.hidden && !markerPending &&
+    !profileMarkers.getLayers().some(marker => marker.isPopupOpen())) void loadProfileMarkers();
+}, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && activeProfile && user) void loadProfileMarkers();
+});
 
 async function stopProfileLocation() {
   if (locationInterval !== null) clearInterval(locationInterval);
@@ -270,7 +313,7 @@ async function activateProfile(profile) {
   element('presence-status').hidden = true;
   updateProfileControls();
   if (!profile) {
-    profileMarkers.clearLayers();
+    clearProfileMarkers();
     element('presence-status').hidden = true;
     profileStatus('Du siehst dieses Revier wie ein Gast.');
     return;
@@ -279,6 +322,8 @@ async function activateProfile(profile) {
     activeProfile = profile;
     element('profile-list').value = profile.id;
     updateProfileControls();
+    await registerProfileBoundary(profile);
+    if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
     await loadProfileMarkers();
     element('presence-status').hidden = false;
     void loadProfileLocations();
@@ -352,7 +397,7 @@ async function rejectProfileSelection(profile, message) {
   if (revision !== profileActivationRevision) return;
   activeProfile = null;
   element('profile-list').value = '';
-  profileMarkers.clearLayers();
+  clearProfileMarkers();
   element('presence-status').hidden = true;
   updateProfileControls();
   profileStatus(message);
@@ -362,7 +407,7 @@ async function loadProfiles(preferredId) {
   const revision = ++profileRevision;
   profiles = [];
   activeProfile = null;
-  profileMarkers.clearLayers();
+  clearProfileMarkers();
   resetMarkerPlacement();
   updateProfileControls();
   const source = currentSource();
@@ -400,6 +445,8 @@ async function loadProfiles(preferredId) {
   profileSelect.hidden = profiles.length === 0;
   profileStatus(profiles.length ? `${profiles.length} unabhaengige(s) Revierprofil(e).` : 'Noch kein Profil fuer dieses Revier.');
   updateProfileControls();
+  if (activeProfile) await registerProfileBoundary(activeProfile);
+  if (revision !== profileRevision) return;
   await loadProfileMarkers();
   if (activeProfile?.owner_id === user.id) {
     element('presence-status').hidden = false;
@@ -419,7 +466,7 @@ function clearSelection() {
   profiles = [];
   activeProfile = null;
   profileRevision += 1;
-  profileMarkers.clearLayers();
+  clearProfileMarkers();
   profileLocations.clearLayers();
   element('location-key').hidden = true;
   resetMarkerPlacement();
@@ -719,7 +766,7 @@ element('profile-list').addEventListener('change', async event => {
   activeProfile = null;
   resetMarkerPlacement();
   element('invite-form').hidden = true;
-  profileMarkers.clearLayers();
+  clearProfileMarkers();
   updateProfileControls();
   if (!profile) {
     element('presence-status').hidden = true;
@@ -747,7 +794,7 @@ function declineProfileLocation() {
   element('location-consent-dialog').close();
   element('profile-list').value = '';
   activeProfile = null;
-  profileMarkers.clearLayers();
+  clearProfileMarkers();
   element('presence-status').hidden = true;
   updateProfileControls();
   profileStatus('Standortfreigabe abgelehnt. Du siehst dieses Revier wie ein Gast.');
@@ -789,7 +836,7 @@ element('invite-form').addEventListener('submit', async event => {
   profileStatus('Einladungslink per E-Mail angefordert. Nach bestaetigter Anmeldung wird dieses Profil lesbar.');
 });
 element('add-marker').addEventListener('click', () => {
-  if (!activeProfile || activeProfile.owner_id !== user?.id) return;
+  if (!activeProfile || !user || markerPending) return;
   placementMode = !placementMode;
   markerCoordinates = null;
   element('marker-form').hidden = true;
@@ -813,25 +860,58 @@ map.on('click', event => {
 });
 element('marker-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!supabaseClient || !markerCoordinates || activeProfile?.owner_id !== user?.id) return;
+  if (!supabaseClient || !markerCoordinates || !activeProfile || !user || markerPending) return;
+  const type = markerTypesById.get(element('marker-type').value);
+  if (!type || (!type.temporary && activeProfile.owner_id !== user.id)) return;
+  const profileId = activeProfile.id;
+  const userId = user.id;
+  const feature = selected;
+  const coordinates = { lat: markerCoordinates.lat, lng: markerCoordinates.lng };
+  if (!pointInSelectedFeature(coordinates)) {
+    profileStatus('Markierungen muessen innerhalb des ausgewaehlten Jagdbezirks liegen.');
+    return;
+  }
   const button = element('marker-form').querySelector('button[type="submit"]');
+  markerPending = true;
   button.disabled = true;
-  const type = markerTypesById.get(element('marker-type').value) || markerTypesById.get(fallbackMarkerType);
   const title = element('marker-title').value.trim() || type.label;
-  const { error } = await supabaseClient.from('hunting_markers').insert({
-    profile_id: activeProfile.id,
-    type_id: type.id,
-    title,
-    notes: element('marker-notes').value.trim(),
-    latitude: markerCoordinates.lat,
-    longitude: markerCoordinates.lng,
-    created_by: user.id
-  });
-  button.disabled = false;
-  if (error) { profileStatus(`Markierung konnte nicht gespeichert werden: ${error.message}`); return; }
-  resetMarkerPlacement();
-  profileStatus('Markierung gespeichert.');
-  await loadProfileMarkers();
+  const notes = element('marker-notes').value.trim();
+  try {
+    let result;
+    if (type.temporary) {
+      if (!navigator.geolocation) throw new Error('Standortbestimmung nicht verfuegbar.');
+      profileStatus('Aktueller Standort wird geprueft ...');
+      const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve,
+        error => reject(new Error(error.code === 1 ? 'Standortzugriff nicht erlaubt.' : 'Standort konnte nicht bestimmt werden.')),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }));
+      if (activeProfile?.id !== profileId || user?.id !== userId || selected !== feature) return;
+      if (!pointInSelectedFeature({ lat: position.coords.latitude, lng: position.coords.longitude })) {
+        throw new Error('Dein aktueller Standort liegt ausserhalb des Reviers.');
+      }
+      result = await supabaseClient.rpc('create_temporary_hunting_marker', {
+        p_profile_id: profileId, p_type_id: type.id, p_title: title, p_notes: notes,
+        p_latitude: coordinates.lat, p_longitude: coordinates.lng,
+        p_user_latitude: position.coords.latitude, p_user_longitude: position.coords.longitude
+      });
+    } else {
+      result = await supabaseClient.from('hunting_markers').insert({
+        profile_id: profileId, type_id: type.id, title, notes,
+        latitude: coordinates.lat, longitude: coordinates.lng, created_by: userId
+      });
+    }
+    if (activeProfile?.id !== profileId || user?.id !== userId || selected !== feature) return;
+    if (result.error) throw new Error(result.error.message);
+    resetMarkerPlacement();
+    profileStatus('Markierung gespeichert.');
+    await loadProfileMarkers();
+  } catch (error) {
+    if (activeProfile?.id === profileId && user?.id === userId && selected === feature) {
+      profileStatus(`Markierung konnte nicht gespeichert werden: ${error.message}`);
+    }
+  } finally {
+    markerPending = false;
+    button.disabled = false;
+  }
 });
 element('download').addEventListener('click', () => {
   if (!selected) return;
@@ -890,7 +970,7 @@ async function applySession(session) {
     profiles = [];
     activeProfile = null;
     profileRevision += 1;
-    profileMarkers.clearLayers();
+    clearProfileMarkers();
     resetMarkerPlacement();
     element('profile-section').hidden = true;
     element('profile-list').replaceChildren();
