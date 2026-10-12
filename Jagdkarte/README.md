@@ -294,9 +294,18 @@ use a provider that explicitly permits them or self-hosted tiles. Offline
 authentication is not simulated. Loaded polygons remain cached across reloads.
 
 For a new deployment, increment the cache version in `sw.js` whenever a cached
-asset changes, including authentication configuration. Close existing app tabs
-and reopen after the new worker activates. Other repository apps' caches are
-not modified.
+asset changes, including authentication configuration. Installation reloads shell
+assets from the network rather than the browser's HTTP cache. A fully installed
+worker activates immediately and claims existing clients. Controlled app windows
+show an **App aktualisieren** icon instead of automatically reloading and losing
+unsaved input. Returning to the app while online also checks for worker updates.
+Versions predating this icon must be reopened once after this deployment to load
+the new application code. Other repository apps' caches are not modified.
+
+The marker catalog and local marker SVGs use network-first caching: successful
+online responses replace the cached files; offline or failed requests use the
+last cached version. Newly introduced marker SVG paths are cached on demand as
+well. Reopening or updating the app reloads the catalog into the type selector.
 
 Dependencies are bundled: Supabase JS 2.49.8, Lucide 0.468.0, and Leaflet 1.9.3
 under `vendor/leaflet/`. Its license and runtime images are included locally, so

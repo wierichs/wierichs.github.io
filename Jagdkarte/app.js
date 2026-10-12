@@ -1149,5 +1149,16 @@ window.addEventListener('beforeinstallprompt', event => { event.preventDefault()
 element('install').addEventListener('click', async () => { if (!installPrompt) return; await installPrompt.prompt(); installPrompt = null; element('install').hidden = true; });
 window.addEventListener('appinstalled', () => { installPrompt = null; element('install').hidden = true; });
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => { showMapStatus('Offline-App konnte nicht eingerichtet werden.', 'error'); });
+  const wasControlled = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (wasControlled) element('update-app').hidden = false;
+  });
+  element('update-app').addEventListener('click', () => location.reload());
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => {
+    const checkForUpdate = () => {
+      if (navigator.onLine && !document.hidden) void registration.update().catch(() => {});
+    };
+    window.addEventListener('online', checkForUpdate);
+    document.addEventListener('visibilitychange', checkForUpdate);
+  }).catch(() => { showMapStatus('Offline-App konnte nicht eingerichtet werden.', 'error'); });
 }
