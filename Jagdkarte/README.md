@@ -130,14 +130,37 @@ or sign out first.
 
 ## Data Coverage
 
-Choose a region to load its district data; no regional dataset is fetched before
-the first selection. The app loads only the selected region, and changing the
+Choose a region to load its district data; on the first visit no regional dataset
+is fetched before selection. The last selected region and stable district ID are
+stored locally in this browser and restored on startup, using cached boundaries
+when available. Removing the selection or changing the region forgets it. Missing
+districts and invalid or unavailable browser storage are handled without restoring
+a stale polygon. No private profile ID, GPS position, or location-sharing consent
+is saved with this selection; existing authentication and consent rules still apply.
+The app loads only the selected region, and changing the
 region cancels an in-flight request for the previous one. Bielefeld,
 Nordrhein-Westfalen, is one available source; its live WFS returned 63 polygon
 features during browser verification. Search matches names, numbers, and scalar
 attributes, including EJB/GJB codes. Selecting a result highlights and fits its
 polygon; the boundary can be toggled or exported as GeoJSON with source and
 license information.
+
+The panel has **Suche** and **Auswahl** tabs. Suche retains the region/search
+workflow; Auswahl lists the authenticated user's own and invited profiles across
+all configured regions, with region and Eigen/Geteilt labels. Supabase RLS filters
+this list; no additional database migration or separate favorites storage is used.
+Clicking an entry loads its region and selects the district by stable ID. The
+chosen profile is respected even when multiple owners have profiles for the same
+district. Shared entries still require the existing location-consent workflow.
+The current district is highlighted, refresh retries failed/empty list loads,
+and signing out clears the private list. Arrow keys and Home/End switch tabs.
+
+The chevron in the search-panel heading collapses both tabs and their lists,
+without clearing the selected district, search text, or forms. The current district
+and its profile/marker controls remain visible and scrollable. With no district
+selected, the collapsed panel becomes a compact mobile bottom row or desktop side
+rail so the map can use the free space. The toggle supports keyboard activation
+and exposes its expanded state to assistive technology.
 
 **Rhein-Kreis Neuss** is also available as a local, searchable snapshot of
 140 district polygons, retrieved on 2026-10-08. Its public portal provides WMS

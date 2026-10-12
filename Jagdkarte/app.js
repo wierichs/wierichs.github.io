@@ -2,6 +2,7 @@ import { boundaries, loadBoundaries, featureName } from './data.js';
 
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
+const selectionStorageKey = 'jagdkarte-last-selection-v1';
 const element = id => document.getElementById(id);
 const map = L.map('map').setView([51.1, 10.4], 6);
 const mapSurface = element('map-surface');
@@ -17,6 +18,7 @@ let authPending = false;
 let requestedEmail = null;
 let features = [];
 let selected = null;
+let savedSelection = readSavedSelection();
 let boundary = null;
 let locationLayer = null;
 let controller = null;
@@ -28,6 +30,10 @@ let sourceAttribution = '';
 let tileWarningShown = false;
 let mapStatusTimer = null;
 let profiles = [];
+let savedProfiles = [];
+let savedProfilesRevision = 0;
+let savedOpenRevision = 0;
+let savedProfilePending = false;
 let activeProfile = null;
 let placementMode = false;
 let markerCoordinates = null;
@@ -50,6 +56,16 @@ const profileLocations = L.layerGroup().addTo(map);
 
 window.lucide?.createIcons();
 new ResizeObserver(() => map.invalidateSize()).observe(element('map'));
+element('toggle-search-panel').addEventListener('click', () => {
+  const collapsed = element('app-layout').classList.toggle('search-collapsed');
+  const label = collapsed ? 'Reviersuche aufklappen' : 'Reviersuche einklappen';
+  element('search-panel-body').hidden = collapsed;
+  element('toggle-search-panel').setAttribute('aria-expanded', String(!collapsed));
+  element('toggle-search-panel').setAttribute('aria-label', label);
+  element('toggle-search-panel').title = label;
+  element('collapse-search-icon').toggleAttribute('hidden', collapsed);
+  element('expand-search-icon').toggleAttribute('hidden', !collapsed);
+});
 tiles.on('tileerror', () => {
   if (!tileWarningShown) {
     showMapStatus('Hintergrundkarte nicht verfuegbar. Internetverbindung pruefen.', 'error');
@@ -73,14 +89,155 @@ function showMapStatus(message, type = 'info') {
 
 element('close-map-status').addEventListener('click', hideMapStatus);
 
+function setDistrictTab(name, focus = false) {
+  for (const tabName of ['search', 'saved']) {
+    const active = name === tabName;
+    const tab = element(`${tabName}-tab`);
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+    element(`${tabName}-view`).hidden = !active;
+    if (active && focus) tab.focus();
+  }
+  if (name === 'saved') void loadSavedProfiles();
+}
+
+element('search-tab').addEventListener('click', () => setDistrictTab('search'));
+element('saved-tab').addEventListener('click', () => setDistrictTab('saved'));
+element('district-tabs').addEventListener('keydown', event => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const name = event.key === 'Home' ? 'search' : event.key === 'End' ? 'saved'
+    : element('search-tab').getAttribute('aria-selected') === 'true' ? 'saved' : 'search';
+  setDistrictTab(name, true);
+});
+element('refresh-saved').addEventListener('click', () => void loadSavedProfiles());
+
+function updateSavedProfileSelection() {
+  for (const button of element('saved-profiles').querySelectorAll('button')) {
+    const profile = savedProfiles.find(candidate => candidate.id === button.dataset.profileId);
+    const active = Boolean(profile && selected && profile.source_id === currentSource()?.id &&
+      profile.feature_id === selectedFeatureId() && (!activeProfile || activeProfile.id === profile.id));
+    button.setAttribute('aria-pressed', String(active));
+  }
+}
+
+function renderSavedProfiles() {
+  element('saved-profiles').replaceChildren();
+  for (const profile of savedProfiles) {
+    const source = config.sources.find(candidate => candidate.id === profile.source_id);
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.profileId = profile.id;
+    button.disabled = savedProfilePending;
+    const name = document.createElement('strong');
+    name.textContent = profile.district_name;
+    const detail = document.createElement('small');
+    detail.textContent = [source?.label || profile.source_id, profile.owner_id === user?.id
+      ? 'Eigen' : `Geteilt (${profile.owner_id.slice(0, 8)})`].join(' / ');
+    button.append(name, detail);
+    button.addEventListener('click', () => void openSavedProfile(profile));
+    item.append(button);
+    element('saved-profiles').append(item);
+  }
+  updateSavedProfileSelection();
+}
+
+async function loadSavedProfiles() {
+  const revision = ++savedProfilesRevision;
+  element('refresh-saved').disabled = true;
+  if (!user || !supabaseClient) {
+    savedProfiles = [];
+    renderSavedProfiles();
+    element('saved-status').textContent = 'Anmelden, um gespeicherte Reviere zu sehen.';
+    return;
+  }
+  const userId = user.id;
+  element('saved-view').setAttribute('aria-busy', 'true');
+  element('saved-status').textContent = 'Gespeicherte Reviere werden geladen ...';
+  try {
+    const { data, error } = await supabaseClient.from('hunting_profiles')
+      .select('id,source_id,feature_id,district_name,owner_id,created_at').order('district_name');
+    if (revision !== savedProfilesRevision || user?.id !== userId) return;
+    if (error) throw new Error(error.message);
+    savedProfiles = data || [];
+    renderSavedProfiles();
+    element('saved-status').textContent = savedProfiles.length
+      ? `${savedProfiles.length} gespeicherte(s) Revierprofil(e).` : 'Noch keine eigenen oder freigegebenen Reviere.';
+  } catch (error) {
+    if (revision === savedProfilesRevision && user?.id === userId) {
+      element('saved-status').textContent = `Gespeicherte Reviere konnten nicht geladen werden: ${error.message}`;
+    }
+  } finally {
+    if (revision === savedProfilesRevision) {
+      element('saved-view').setAttribute('aria-busy', 'false');
+      element('refresh-saved').disabled = !user;
+    }
+  }
+}
+
+async function openSavedProfile(profile) {
+  if (!user || savedProfilePending) return;
+  const source = config.sources.find(candidate => candidate.id === profile.source_id);
+  if (!source) {
+    element('saved-status').textContent = 'Die gespeicherte Region ist nicht mehr verfuegbar.';
+    return;
+  }
+  const revision = ++savedOpenRevision;
+  const userId = user.id;
+  savedProfilePending = true;
+  renderSavedProfiles();
+  element('saved-status').textContent = 'Gespeichertes Revier wird geoeffnet ...';
+  try {
+    saveSelection(null);
+    element('source').value = source.id;
+    const loadRevision = boundaryLoadRevision + 1;
+    await loadSelectedSource();
+    if (revision !== savedOpenRevision || user?.id !== userId || boundaryLoadRevision !== loadRevision) return;
+    const feature = features.find(candidate => featureIdentifier(candidate, source) === profile.feature_id);
+    if (!feature) throw new Error('Das Revier ist in den verfuegbaren Grenzdaten nicht enthalten.');
+    await selectFeature(feature, null, profile.id);
+    if (revision !== savedOpenRevision || user?.id !== userId) return;
+    renderResults();
+    updateSavedProfileSelection();
+    element('saved-status').textContent = `Ausgewaehlt: ${profile.district_name}`;
+  } catch (error) {
+    if (revision === savedOpenRevision && user?.id === userId) {
+      element('saved-status').textContent = `Revier konnte nicht geoeffnet werden: ${error.message}`;
+    }
+  } finally {
+    if (revision === savedOpenRevision) {
+      savedProfilePending = false;
+      for (const button of element('saved-profiles').querySelectorAll('button')) button.disabled = false;
+    }
+  }
+}
+
 function currentSource() { return config.sources.find(source => source.id === element('source').value); }
 function status(message) { element('status').textContent = message; }
-function selectedFeatureId() {
-  const source = currentSource();
-  const configuredId = source?.idFields?.map(field => selected?.properties?.[field])
+function featureIdentifier(feature, source) {
+  const configuredId = source?.idFields?.map(field => feature?.properties?.[field])
     .find(value => value !== undefined && value !== null && String(value).trim());
-  const value = configuredId ?? selected?.properties?.id ?? selected?.id;
+  const value = configuredId ?? feature?.properties?.id ?? feature?.id;
   return value == null ? null : String(value);
+}
+
+function selectedFeatureId() { return featureIdentifier(selected, currentSource()); }
+
+function readSavedSelection() {
+  try {
+    const selection = JSON.parse(localStorage.getItem(selectionStorageKey));
+    return selection && config.sources.some(source => source.id === selection.sourceId) &&
+      typeof selection.featureId === 'string' && selection.featureId.trim() ? selection : null;
+  } catch { return null; }
+}
+
+function saveSelection(selection) {
+  savedSelection = selection;
+  try {
+    if (selection) localStorage.setItem(selectionStorageKey, JSON.stringify(selection));
+    else localStorage.removeItem(selectionStorageKey);
+  } catch {}
 }
 
 function profileStatus(message) { element('profile-status').textContent = message; }
@@ -108,6 +265,7 @@ function updateProfileControls() {
     option.hidden = option.disabled;
   });
   if (select.selectedOptions[0]?.disabled) select.value = availableTypes[0]?.id || '';
+  updateSavedProfileSelection();
 }
 
 async function loadMarkerTypes() {
@@ -440,11 +598,13 @@ async function loadProfiles(preferredId) {
   guestOption.value = '';
   guestOption.textContent = 'Als Gast ansehen';
   profileSelect.prepend(guestOption);
-  activeProfile = profiles.find(profile => profile.id === preferredId && profile.owner_id === user.id) ||
-    profiles.find(profile => profile.owner_id === user.id) || null;
+  const preferredProfile = profiles.find(profile => profile.id === preferredId);
+  activeProfile = preferredId ? (preferredProfile?.owner_id === user.id ? preferredProfile : null)
+    : profiles.find(profile => profile.owner_id === user.id) || null;
   if (activeProfile) profileSelect.value = activeProfile.id;
   profileSelect.hidden = profiles.length === 0;
   profileStatus(profiles.length ? `${profiles.length} unabhaengige(s) Revierprofil(e).` : 'Noch kein Profil fuer dieses Revier.');
+  if (preferredId && !preferredProfile) profileStatus('Dieses Profil ist nicht mehr zugreifbar.');
   updateProfileControls();
   if (activeProfile) await registerProfileBoundary(activeProfile);
   if (revision !== profileRevision) return;
@@ -454,6 +614,7 @@ async function loadProfiles(preferredId) {
     void loadProfileLocations();
     presenceInterval = setInterval(() => void loadProfileLocations(), 10000);
   }
+  if (preferredProfile && preferredProfile.owner_id !== user?.id) await chooseProfile(preferredProfile);
 }
 
 function clearSelection() {
@@ -464,6 +625,7 @@ function clearSelection() {
   if (boundary) map.removeLayer(boundary);
   boundary = null;
   selected = null;
+  updateSavedProfileSelection();
   profiles = [];
   activeProfile = null;
   profileRevision += 1;
@@ -484,10 +646,12 @@ function clearSelection() {
   element('results').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', 'false'));
 }
 
-function selectFeature(feature, button) {
+function selectFeature(feature, button, preferredProfileId) {
   clearSelection();
   selected = feature;
   const source = currentSource();
+  const featureId = selectedFeatureId();
+  saveSelection(featureId ? { sourceId: source.id, featureId } : null);
   boundary = L.geoJSON(feature, { style: { color: '#c43b55', weight: 3, fillColor: '#c43b55', fillOpacity: .14 } });
   if (element('show-boundary').checked) boundary.addTo(map);
   map.fitBounds(boundary.getBounds(), { padding: [24, 24], maxZoom: 16 });
@@ -501,11 +665,12 @@ function selectFeature(feature, button) {
     detail.textContent = String(value);
     element('details').append(term, detail);
   });
-  button.setAttribute('aria-pressed', 'true');
+  button?.setAttribute('aria-pressed', 'true');
   element('selection').hidden = false;
   element('fit').disabled = false;
   element('profile-section').hidden = !user;
-  if (user) void loadProfiles();
+  updateSavedProfileSelection();
+  if (user) return loadProfiles(preferredProfileId);
 }
 
 function pointOnSegment(point, start, end) {
@@ -614,7 +779,14 @@ async function writeBoundaryCache(source, loadedFeatures) {
 
 function showBoundaries() {
   if (features.length) map.fitBounds(L.geoJSON({ type: 'FeatureCollection', features }).getBounds(), { padding: [25, 25], maxZoom: 11 });
+  const source = currentSource();
+  const remembered = savedSelection?.sourceId === source?.id
+    ? features.find(feature => featureIdentifier(feature, source) === savedSelection.featureId) : null;
+  const missingSelection = savedSelection?.sourceId === source?.id && !remembered;
+  if (remembered) selectFeature(remembered);
+  else if (missingSelection) saveSelection(null);
   renderResults();
+  if (missingSelection) status('Das zuletzt ausgewaehlte Revier ist in dieser Region nicht mehr verfuegbar.');
 }
 
 async function fetchSelectedBoundaries(source, revision) {
@@ -698,7 +870,10 @@ config.sources.forEach(source => {
 updateSource();
 status('Region auswaehlen, um Reviere zu laden.');
 element('refresh-boundaries').disabled = true;
-element('source').addEventListener('change', loadSelectedSource);
+element('source').addEventListener('change', () => {
+  saveSelection(null);
+  void loadSelectedSource();
+});
 element('refresh-boundaries').addEventListener('click', refreshSelectedSource);
 element('search-form').addEventListener('submit', event => {
   event.preventDefault();
@@ -708,7 +883,10 @@ element('search-form').addEventListener('submit', event => {
     : 'Bitte zuerst eine Region auswaehlen.');
 });
 element('query').addEventListener('input', () => { if (features.length) renderResults(); });
-element('clear').addEventListener('click', clearSelection);
+element('clear').addEventListener('click', () => {
+  saveSelection(null);
+  clearSelection();
+});
 element('fit').addEventListener('click', () => { if (boundary) map.fitBounds(boundary.getBounds(), { padding: [24, 24], maxZoom: 16 }); });
 function syncMapFullscreen() {
   const fullscreen = document.fullscreenElement === mapSurface || mapSurface.classList.contains('is-fullscreen');
@@ -761,6 +939,10 @@ element('claim-profile').addEventListener('click', async () => {
 });
 element('profile-list').addEventListener('change', async event => {
   const profile = profiles.find(candidate => candidate.id === event.target.value) || null;
+  await chooseProfile(profile);
+});
+
+async function chooseProfile(profile) {
   const revision = ++profileActivationRevision;
   await stopProfileLocation();
   if (revision !== profileActivationRevision) return;
@@ -780,9 +962,9 @@ element('profile-list').addEventListener('change', async event => {
   }
   element('presence-status').hidden = true;
   pendingProfileId = profile.id;
-  event.target.value = '';
+  element('profile-list').value = '';
   element('location-consent-dialog').showModal();
-});
+}
 element('accept-location').addEventListener('click', () => {
   const profile = profiles.find(candidate => candidate.id === pendingProfileId);
   pendingProfileId = null;
@@ -966,6 +1148,14 @@ async function applySession(session) {
   element('user-label').textContent = user?.email || 'Nicht angemeldet';
   element('account-button').querySelector('span').textContent = user ? 'Abmelden' : 'Anmelden';
   if (!user) {
+    savedProfilesRevision += 1;
+    savedOpenRevision += 1;
+    savedProfilePending = false;
+    savedProfiles = [];
+    renderSavedProfiles();
+    element('saved-view').setAttribute('aria-busy', 'false');
+    element('saved-status').textContent = 'Anmelden, um gespeicherte Reviere zu sehen.';
+    element('refresh-saved').disabled = true;
     controller?.abort();
     controller = null;
     profiles = [];
@@ -982,6 +1172,9 @@ async function applySession(session) {
     if (features.length) renderResults();
     else if (!currentSource() && !controller) status('Region auswaehlen, um Reviere zu laden.');
   } else if (previousId !== user.id) {
+    savedProfiles = [];
+    renderSavedProfiles();
+    void loadSavedProfiles();
     element('login-dialog').close();
     if (selected) {
       element('profile-section').hidden = false;
@@ -1161,4 +1354,9 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('online', checkForUpdate);
     document.addEventListener('visibilitychange', checkForUpdate);
   }).catch(() => { showMapStatus('Offline-App konnte nicht eingerichtet werden.', 'error'); });
+}
+
+if (savedSelection) {
+  element('source').value = savedSelection.sourceId;
+  void loadSelectedSource();
 }

@@ -23,9 +23,12 @@
     <span class="network" id="network">Online</span>
     <div class="account"><span id="user-label">Nicht angemeldet</span><button id="account-button"><i data-lucide="log-in" aria-hidden="true"></i><span>Anmelden</span></button></div>
   </header>
-  <main>
-    <aside aria-label="Reviersuche">
-      <div class="panel-heading"><span class="eyebrow">OFFENE GEODATEN / DEUTSCHLAND</span><h1>Jagdbezirke</h1></div>
+  <main id="app-layout">
+    <aside id="search-panel" aria-label="Reviersuche">
+      <div class="panel-heading"><div class="panel-title"><span class="eyebrow">OFFENE GEODATEN / DEUTSCHLAND</span><h1>Jagdbezirke</h1></div><button id="toggle-search-panel" class="icon-button" type="button" title="Reviersuche einklappen" aria-label="Reviersuche einklappen" aria-expanded="true" aria-controls="search-panel-body"><i id="collapse-search-icon" data-lucide="chevron-down" aria-hidden="true"></i><i id="expand-search-icon" data-lucide="chevron-up" aria-hidden="true" hidden></i></button></div>
+      <div id="search-panel-body">
+      <div id="district-tabs" class="district-tabs" role="tablist" aria-label="Revierauswahl"><button id="search-tab" type="button" role="tab" aria-selected="true" aria-controls="search-view"><i data-lucide="search" aria-hidden="true"></i><span>Suche</span></button><button id="saved-tab" type="button" role="tab" aria-selected="false" aria-controls="saved-view" tabindex="-1"><i data-lucide="list" aria-hidden="true"></i><span>Auswahl</span></button></div>
+      <div id="search-view" role="tabpanel" aria-labelledby="search-tab">
       <form id="search-form">
         <fieldset id="search-fields">
           <label for="source">Region</label>
@@ -41,6 +44,9 @@
       <div class="result-heading"><h2>Reviere</h2><span id="result-count">0</span></div>
       <p id="status" role="status" aria-live="polite">Keine Region geladen.</p>
       <ul id="results" aria-label="Suchergebnisse"></ul>
+      </div>
+      <div id="saved-view" role="tabpanel" aria-labelledby="saved-tab" hidden><div class="result-heading saved-heading"><h2>Gespeicherte Reviere</h2><button id="refresh-saved" type="button" class="icon-button" title="Gespeicherte Reviere aktualisieren" aria-label="Gespeicherte Reviere aktualisieren" disabled><i data-lucide="refresh-cw" aria-hidden="true"></i></button></div><p id="saved-status" role="status" aria-live="polite">Anmelden, um gespeicherte Reviere zu sehen.</p><ul id="saved-profiles" aria-label="Gespeicherte Reviere"></ul></div>
+      </div>
       <section id="selection" hidden aria-label="Ausgewaehltes Revier">
         <div class="selection-heading"><h2 id="selected-name"></h2><button id="clear" class="icon-button" aria-label="Auswahl entfernen" title="Auswahl entfernen"><i data-lucide="x" aria-hidden="true"></i></button></div>
         <dl id="details"></dl>

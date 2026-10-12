@@ -23,6 +23,24 @@ a { color: var(--green); }
 #user-label { font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 main { display: grid; grid-template-columns: 350px minmax(0, 1fr); height: calc(100dvh - 70px); }
 aside { display: flex; flex-direction: column; min-height: 0; padding: 24px; overflow-y: auto; border-right: 1px solid var(--line); background: linear-gradient(180deg, #fff 0%, #f7faf8 100%); }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.panel-title { min-width: 0; }
+#toggle-search-panel svg { transform: rotate(90deg); }
+#search-panel-body { display: flex; flex-direction: column; flex-shrink: 0; }
+.district-tabs { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.district-tabs button { flex: 1; min-width: 0; border: 0; border-radius: 0; font-size: 13px; background: transparent; }
+.district-tabs button[aria-selected=true] { color: var(--green); box-shadow: inset 0 -2px var(--green); font-weight: 700; }
+.result-heading.saved-heading { margin-top: 0; padding-top: 0; border-top: 0; gap: 8px; }
+#saved-status { font-size: 13px; color: var(--muted); line-height: 1.5; }
+#saved-profiles { list-style: none; padding: 0; margin: 0; max-height: 32dvh; overflow-y: auto; }
+#saved-profiles button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 12px 8px; background: transparent; overflow-wrap: anywhere; }
+#saved-profiles button[aria-pressed=true] { background: #e4efe8; box-shadow: inset 3px 0 var(--green); }
+#saved-profiles small { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+main.search-collapsed { grid-template-columns: 70px minmax(0, 1fr); }
+main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: 350px minmax(0, 1fr); }
+main.search-collapsed aside { padding: 12px; }
+main.search-collapsed .panel-title { display: none; }
+main.search-collapsed:not(:has(#selection:not([hidden]))) .source-note { display: none; }
 .eyebrow { color: var(--muted); font-size: 10px; }
 h1 { font-size: 29px; margin: 8px 0 25px; }
 h2 { font-size: 16px; margin: 0; overflow-wrap: anywhere; }
@@ -102,6 +120,9 @@ dialog::backdrop { background: #152a2260; }
   .brand { font-size: 21px; } #user-label { display: none; } .network { margin-left: auto; } .account { margin-left: 0; }
   #account-button { padding: 9px; font-size: 12px; }
   main { height: calc(100dvh - 60px); grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }
+  main.search-collapsed { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 68px; }
+  main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }
+  #toggle-search-panel svg { transform: none; }
   .map-surface { grid-row: 1; } aside { grid-row: 2; padding: 18px; border-right: 0; border-top: 1px solid var(--line); }
   h1 { font-size: 23px; margin-bottom: 16px; } #results { max-height: 200px; }
   .map-key { bottom: 35px; font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
