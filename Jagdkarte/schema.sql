@@ -15,19 +15,25 @@ create table if not exists public.hunting_profile_members (
   profile_id uuid not null references public.hunting_profiles(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   invited_by uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'guest' check (role in ('guest', 'editor')),
   created_at timestamptz not null default now(),
   primary key (profile_id, user_id)
 );
+alter table public.hunting_profile_members
+  add column if not exists role text not null default 'guest' check (role in ('guest', 'editor'));
 
 create table if not exists public.hunting_profile_invitations (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.hunting_profiles(id) on delete cascade,
   email text not null check (length(email) between 3 and 254),
   invited_by uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  role text not null default 'guest' check (role in ('guest', 'editor')),
   created_at timestamptz not null default now(),
   accepted_at timestamptz,
   unique (profile_id, email)
 );
+alter table public.hunting_profile_invitations
+  add column if not exists role text not null default 'guest' check (role in ('guest', 'editor'));
 
 create table if not exists public.hunting_markers (
   id uuid primary key default gen_random_uuid(),
@@ -91,6 +97,17 @@ as $$
   );
 $$;
 
+create or replace function public.can_edit_hunting_profile(profile_uuid uuid)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select public.owns_hunting_profile(profile_uuid) or exists (
+    select 1 from public.hunting_profile_members m
+    where m.profile_id = profile_uuid and m.user_id = (select auth.uid()) and m.role = 'editor'
+  );
+$$;
+
 create or replace function public.hunting_mode_is_enabled(profile_uuid uuid)
 returns boolean
 language sql stable security definer
@@ -127,8 +144,8 @@ language plpgsql security definer
 set search_path = ''
 as $$
 begin
-  if auth.uid() is null or not public.owns_hunting_profile(p_profile_id) then
-    raise exception 'Nur der Revier-Owner kann den Jagdmodus aendern';
+  if auth.uid() is null or not public.can_edit_hunting_profile(p_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann den Jagdmodus aendern';
   end if;
   update public.hunting_profiles set hunting_mode = p_enabled where id = p_profile_id;
   if not p_enabled then
@@ -161,8 +178,8 @@ set search_path = ''
 as $$
 declare district_geometry extensions.geometry;
 begin
-  if auth.uid() is null or not public.owns_hunting_profile(p_profile_id) then
-    raise exception 'Nur der Revier-Owner kann die Grenze hinterlegen';
+  if auth.uid() is null or not public.can_edit_hunting_profile(p_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann die Grenze hinterlegen';
   end if;
   district_geometry := extensions.st_setsrid(extensions.st_geomfromgeojson(p_geometry::text), 4326);
   if district_geometry is null or extensions.st_isempty(district_geometry)
@@ -258,23 +275,27 @@ begin
 end;
 $$;
 
-create or replace function public.invite_hunting_profile_member(p_profile_id uuid, p_email text)
+drop function if exists public.invite_hunting_profile_member(uuid, text);
+create or replace function public.invite_hunting_profile_member(p_profile_id uuid, p_email text, p_role text default 'guest')
 returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 declare normalized_email text := lower(trim(p_email));
 begin
-  if auth.uid() is null or not public.owns_hunting_profile(p_profile_id) then
-    raise exception 'Nur der Revier-Owner kann Benutzer einladen';
+  if auth.uid() is null or not public.can_edit_hunting_profile(p_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann Benutzer einladen';
+  end if;
+  if p_role is null or p_role not in ('guest', 'editor') then
+    raise exception 'Ungueltige Teilnehmerrolle';
   end if;
   if normalized_email = lower(coalesce(auth.jwt() ->> 'email', '')) then
     raise exception 'Der eigene Zugang kann nicht eingeladen werden';
   end if;
-  insert into public.hunting_profile_invitations (profile_id, email, invited_by)
-  values (p_profile_id, normalized_email, auth.uid())
+  insert into public.hunting_profile_invitations (profile_id, email, invited_by, role)
+  values (p_profile_id, normalized_email, auth.uid(), p_role)
   on conflict (profile_id, email) do update
-    set invited_by = excluded.invited_by, created_at = now(), accepted_at = null;
+    set invited_by = excluded.invited_by, role = excluded.role, created_at = now(), accepted_at = null;
 end;
 $$;
 
@@ -291,11 +312,12 @@ begin
   select lower(u.email) into verified_email from auth.users u
     where u.id = auth.uid() and u.email_confirmed_at is not null;
   if verified_email is null then return 0; end if;
-  insert into public.hunting_profile_members (profile_id, user_id, invited_by)
-  select i.profile_id, auth.uid(), i.invited_by
+  insert into public.hunting_profile_members (profile_id, user_id, invited_by, role)
+  select i.profile_id, auth.uid(), i.invited_by, i.role
   from public.hunting_profile_invitations i
   where i.accepted_at is null and i.email = verified_email
-  on conflict (profile_id, user_id) do nothing;
+  on conflict (profile_id, user_id) do update
+    set invited_by = excluded.invited_by, role = excluded.role;
   get diagnostics accepted_count = row_count;
   update public.hunting_profile_invitations
     set accepted_at = now()
@@ -327,12 +349,12 @@ create policy "Markers visible to profile members" on public.hunting_markers
     and (expires_at is null or expires_at > now()));
 drop policy if exists "Profile owner can create markers" on public.hunting_markers;
 create policy "Profile owner can create markers" on public.hunting_markers
-  for insert to authenticated with check (public.owns_hunting_profile(profile_id)
+  for insert to authenticated with check (public.can_edit_hunting_profile(profile_id)
     and type_id not in ('anschuss', 'wildsichtung') and expires_at is null
     and created_by = (select auth.uid()));
 drop policy if exists "Profile owner can delete markers" on public.hunting_markers;
 create policy "Profile owner can delete markers" on public.hunting_markers
-  for delete to authenticated using (public.owns_hunting_profile(profile_id));
+  for delete to authenticated using (public.can_edit_hunting_profile(profile_id));
 drop policy if exists "Members can delete their own temporary markers" on public.hunting_markers;
 create policy "Members can delete their own temporary markers" on public.hunting_markers
   for delete to authenticated using (public.can_view_hunting_profile(profile_id)
@@ -366,18 +388,20 @@ grant select, insert, delete on public.hunting_markers to authenticated;
 grant select, insert, update, delete on public.hunting_profile_locations to authenticated;
 revoke all on function public.can_view_hunting_profile(uuid) from public, anon;
 revoke all on function public.owns_hunting_profile(uuid) from public, anon;
+revoke all on function public.can_edit_hunting_profile(uuid) from public, anon;
 revoke all on function public.hunting_mode_is_enabled(uuid) from public, anon;
 revoke all on function public.require_hunting_mode_for_location() from public, anon, authenticated;
 revoke all on function public.set_hunting_mode(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.create_hunting_profile(text, text, text) from public, anon;
-revoke all on function public.invite_hunting_profile_member(uuid, text) from public, anon;
+revoke all on function public.invite_hunting_profile_member(uuid, text, text) from public, anon;
 revoke all on function public.accept_hunting_profile_invitations() from public, anon;
 grant execute on function public.can_view_hunting_profile(uuid) to authenticated;
 grant execute on function public.owns_hunting_profile(uuid) to authenticated;
+grant execute on function public.can_edit_hunting_profile(uuid) to authenticated;
 grant execute on function public.hunting_mode_is_enabled(uuid) to authenticated;
 grant execute on function public.set_hunting_mode(uuid, boolean) to authenticated;
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;
-grant execute on function public.invite_hunting_profile_member(uuid, text) to authenticated;
+grant execute on function public.invite_hunting_profile_member(uuid, text, text) to authenticated;
 grant execute on function public.accept_hunting_profile_invitations() to authenticated;
 revoke all on function public.set_hunting_profile_boundary(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.set_hunting_marker_expiry() from public, anon, authenticated;

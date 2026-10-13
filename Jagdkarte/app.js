@@ -136,7 +136,7 @@ function renderSavedProfiles() {
     name.textContent = profile.district_name;
     const detail = document.createElement('small');
     detail.textContent = [source?.label || profile.source_id, profile.owner_id === user?.id
-      ? 'Eigen' : `Geteilt (${profile.owner_id.slice(0, 8)})`].join(' / ');
+      ? 'Owner' : `${profile.member_role === 'editor' ? 'Bearbeiter' : 'Gast'} (${profile.owner_id.slice(0, 8)})`].join(' / ');
     button.append(name, detail);
     button.addEventListener('click', () => void openSavedProfile(profile));
     item.append(button);
@@ -162,7 +162,14 @@ async function loadSavedProfiles() {
       .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode').order('district_name');
     if (revision !== savedProfilesRevision || user?.id !== userId) return;
     if (error) throw new Error(error.message);
-    savedProfiles = data || [];
+    const { data: memberships, error: membershipError } = await supabaseClient.from('hunting_profile_members')
+      .select('profile_id,role').eq('user_id', userId);
+    if (revision !== savedProfilesRevision || user?.id !== userId) return;
+    if (membershipError) throw new Error(membershipError.message);
+    const memberRoles = new Map((memberships || []).map(member => [member.profile_id, member.role]));
+    savedProfiles = (data || []).map(profile => ({ ...profile,
+      member_role: profile.owner_id === userId ? 'owner' : memberRoles.get(profile.id) || 'guest'
+    }));
     renderSavedProfiles();
     element('saved-status').textContent = savedProfiles.length
       ? `${savedProfiles.length} gespeicherte(s) Revierprofil(e).` : 'Noch keine eigenen oder freigegebenen Reviere.';
@@ -243,6 +250,9 @@ function saveSelection(selection) {
 }
 
 function profileStatus(message) { element('profile-status').textContent = message; }
+function canEditProfile(profile = activeProfile) {
+  return Boolean(user && profile && (profile.owner_id === user.id || profile.member_role === 'editor'));
+}
 
 function resetMarkerPlacement() {
   placementMode = false;
@@ -255,19 +265,19 @@ function resetMarkerPlacement() {
 }
 
 function updateProfileControls() {
-  const ownProfile = Boolean(user && activeProfile && activeProfile.owner_id === user.id);
+  const canEdit = canEditProfile();
   const canCreate = Boolean(user && selected && selectedFeatureId());
   element('claim-profile').hidden = !canCreate || profiles.some(profile => profile.owner_id === user.id);
-  element('invite-toggle').hidden = !ownProfile;
-  element('hunting-mode-control').hidden = !ownProfile;
-  element('owner-location-notice').hidden = !ownProfile;
+  element('invite-toggle').hidden = !canEdit;
+  element('hunting-mode-control').hidden = !canEdit;
+  element('owner-location-notice').hidden = !canEdit;
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
   element('hunting-mode').disabled = huntingModePending;
-  const availableTypes = markerTypes.filter(type => ownProfile || type.temporary);
+  const availableTypes = markerTypes.filter(type => canEdit || type.temporary);
   element('add-marker').hidden = !user || !activeProfile || availableTypes.length === 0;
   const select = element('marker-type');
   Array.from(select.options).forEach(option => {
-    option.disabled = !ownProfile && !markerTypesById.get(option.value)?.temporary;
+    option.disabled = !canEdit && !markerTypesById.get(option.value)?.temporary;
     option.hidden = option.disabled;
   });
   if (select.selectedOptions[0]?.disabled) select.value = availableTypes[0]?.id || '';
@@ -319,7 +329,7 @@ function clearProfileMarkers() {
 }
 
 async function registerProfileBoundary(profile) {
-  if (profile.owner_id !== user?.id || !selected) return;
+  if (!canEditProfile(profile) || !selected) return;
   const { error } = await supabaseClient.rpc('set_hunting_profile_boundary', {
     p_profile_id: profile.id, p_geometry: selected.geometry
   });
@@ -364,7 +374,7 @@ async function loadProfileMarkers() {
       expiry.textContent = `Gueltig bis ${new Date(expiresAt).toLocaleString('de-DE')}`;
       popup.append(expiry);
     }
-    if (activeProfile.owner_id === user.id || (type.temporary && marker.created_by === user.id)) {
+    if (canEditProfile(activeProfile) || (type.temporary && marker.created_by === user.id)) {
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = 'Markierung loeschen';
@@ -597,6 +607,18 @@ async function activateProfile(profile) {
     return;
   }
   profile.hunting_mode = Boolean(modeData.hunting_mode);
+  if (profile.owner_id === user?.id) {
+    profile.member_role = 'owner';
+  } else {
+    const { data: membership, error: membershipError } = await supabaseClient.from('hunting_profile_members')
+      .select('role').eq('profile_id', profile.id).eq('user_id', user.id).maybeSingle();
+    if (revision !== profileActivationRevision) return;
+    if (membershipError || !membership) {
+      profileStatus(`Mitgliedsrolle konnte nicht geladen werden: ${membershipError?.message || 'Profilzugriff fehlt'}`);
+      return;
+    }
+    profile.member_role = membership.role;
+  }
   activeProfile = null;
   element('profile-list').value = '';
   element('presence-status').hidden = true;
@@ -626,6 +648,8 @@ async function activateProfile(profile) {
   activeProfile = profile;
   element('profile-list').value = profile.id;
   updateProfileControls();
+  await registerProfileBoundary(profile);
+  if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
   await loadProfileMarkers();
   if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
   element('presence-status').hidden = false;
@@ -673,13 +697,24 @@ async function loadProfiles(preferredId) {
     profileStatus(`Profile nicht verfuegbar. Datenbankschema aus schema.sql einrichten. (${error.message})`);
     return;
   }
-  profiles = data || [];
+  const { data: memberships, error: membershipError } = await supabaseClient.from('hunting_profile_members')
+    .select('profile_id,role').eq('user_id', user.id);
+  if (revision !== profileRevision) return;
+  if (membershipError) {
+    profileStatus(`Mitgliedsrollen nicht verfuegbar. Datenbankschema aus schema.sql aktualisieren. (${membershipError.message})`);
+    return;
+  }
+  const memberRoles = new Map((memberships || []).map(member => [member.profile_id, member.role]));
+  profiles = (data || []).map(profile => ({ ...profile,
+    member_role: profile.owner_id === user.id ? 'owner' : memberRoles.get(profile.id) || 'guest'
+  }));
   const profileSelect = element('profile-list');
   profileSelect.replaceChildren();
   profiles.forEach(profile => {
     const option = document.createElement('option');
     option.value = profile.id;
-    const profileLabel = profile.owner_id === user.id ? 'Mein Profil' : `Geteiltes Profil ${profile.owner_id.slice(0, 8)}`;
+    const profileLabel = profile.owner_id === user.id ? 'Owner'
+      : profile.member_role === 'editor' ? 'Bearbeiter' : 'Gast';
     option.textContent = `${profileLabel} - ${profile.district_name}`;
     profileSelect.append(option);
   });
@@ -787,8 +822,8 @@ function pointInRing(point, ring) {
   return inside;
 }
 
-function pointInSelectedFeature(point) {
-  const geometry = selected?.geometry;
+function pointInFeature(point, feature) {
+  const geometry = feature?.geometry;
   if (geometry?.type === 'Polygon') {
     return pointInRing(point, geometry.coordinates[0]) && !geometry.coordinates.slice(1).some(ring => pointInRing(point, ring));
   }
@@ -796,6 +831,10 @@ function pointInSelectedFeature(point) {
     return geometry.coordinates.some(polygon => pointInRing(point, polygon[0]) && !polygon.slice(1).some(ring => pointInRing(point, ring)));
   }
   return false;
+}
+
+function pointInSelectedFeature(point) {
+  return pointInFeature(point, selected);
 }
 
 function renderResults() {
@@ -1037,7 +1076,7 @@ element('profile-list').addEventListener('change', async event => {
 });
 element('hunting-mode').addEventListener('change', async event => {
   const profile = activeProfile;
-  if (!profile || profile.owner_id !== user?.id || !supabaseClient) return;
+  if (!profile || !canEditProfile(profile) || !supabaseClient) return;
   const enabled = event.currentTarget.checked;
   huntingModePending = true;
   updateProfileControls();
@@ -1110,13 +1149,14 @@ element('invite-toggle').addEventListener('click', () => {
 });
 element('invite-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!auth || !supabaseClient || !activeProfile || activeProfile.owner_id !== user?.id) return;
+  if (!auth || !supabaseClient || !canEditProfile()) return;
   const email = element('invite-email').value.trim().toLocaleLowerCase('en-US');
+  const role = element('invite-role').value;
   const button = element('invite-form').querySelector('button[type="submit"]');
   button.disabled = true;
   profileStatus('Einladung wird vorbereitet ...');
   const { error: inviteError } = await supabaseClient.rpc('invite_hunting_profile_member', {
-    p_profile_id: activeProfile.id, p_email: email
+    p_profile_id: activeProfile.id, p_email: email, p_role: role
   });
   if (inviteError) {
     profileStatus(`Einladung fehlgeschlagen: ${inviteError.message}`);
@@ -1133,7 +1173,7 @@ element('invite-form').addEventListener('submit', async event => {
     return;
   }
   element('invite-email').value = '';
-  profileStatus('Einladungslink per E-Mail angefordert. Nach bestaetigter Anmeldung wird dieses Profil lesbar.');
+  profileStatus(`${role === 'editor' ? 'Bearbeiter' : 'Gast'}-Einladung per E-Mail angefordert.`);
 });
 element('add-marker').addEventListener('click', () => {
   if (!activeProfile || !user || markerPending) return;
@@ -1145,24 +1185,29 @@ element('add-marker').addEventListener('click', () => {
 });
 element('cancel-marker').addEventListener('click', resetMarkerPlacement);
 map.on('click', event => {
-  if (!placementMode) return;
-  if (!pointInSelectedFeature(event.latlng)) {
-    profileStatus('Markierungen muessen innerhalb des ausgewaehlten Jagdbezirks liegen.');
+  if (placementMode) {
+    if (!pointInSelectedFeature(event.latlng)) {
+      profileStatus('Markierungen muessen innerhalb des ausgewaehlten Jagdbezirks liegen.');
+      return;
+    }
+    markerCoordinates = event.latlng;
+    placementMode = false;
+    element('marker-instruction').hidden = true;
+    element('marker-coordinates').textContent = `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`;
+    element('marker-form').hidden = false;
+    element('add-marker').setAttribute('aria-pressed', 'false');
+    element('marker-title').focus();
     return;
   }
-  markerCoordinates = event.latlng;
-  placementMode = false;
-  element('marker-instruction').hidden = true;
-  element('marker-coordinates').textContent = `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`;
-  element('marker-form').hidden = false;
-  element('add-marker').setAttribute('aria-pressed', 'false');
-  element('marker-title').focus();
+  if (element('search-panel-body').hidden || element('search-tab').getAttribute('aria-selected') !== 'true' || !features.length) return;
+  const feature = features.find(candidate => pointInFeature(event.latlng, candidate));
+  if (feature) selectFeature(feature);
 });
 element('marker-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!supabaseClient || !markerCoordinates || !activeProfile || !user || markerPending) return;
   const type = markerTypesById.get(element('marker-type').value);
-  if (!type || (!type.temporary && activeProfile.owner_id !== user.id)) return;
+  if (!type || (!type.temporary && !canEditProfile())) return;
   const profileId = activeProfile.id;
   const userId = user.id;
   const feature = selected;

@@ -86,14 +86,15 @@ already available. Do not disable RLS or grant access to the `anon` role.
 After signing in, select a district and choose **Als Owner fuehren** to create
 your profile. A district can have separate profiles for different owners; each
 signed-in user has at most one profile per district. Choose a point inside the
-district boundary and add a label and optional note. The owner can invite an
-email address; Supabase sends a passwordless sign-in/registration link, and the
-invited user receives access to that profile after verifying the
-same address. Owner profiles and markers remain independent from other owners'
-profiles for the same district. Only owners can create and delete permanent
-markers. Owners and invited members can create **Anschuss** and **Wildsichtung**
-markers while their current browser-reported location is inside the district.
-Members can also delete their own temporary markers; owners can delete any marker.
+district boundary and add a label and optional note. The owner or a Bearbeiter
+can invite an email address as **Gast** or **Bearbeiter**; Supabase sends a
+passwordless sign-in/registration link, and the invited user receives that role
+after verifying the same address. Bearbeiter can manage boundaries, invitations,
+the Jagdmodus, and permanent markers like the owner, but cannot delete the
+profile. Only the owner can delete it. All members can create temporary
+**Anschuss** and **Wildsichtung** markers while their current browser-reported
+location is inside the district. Members can delete their own temporary markers;
+owners and Bearbeiter can delete any marker.
 When an invitee selects a shared profile while Jagdmodus is active, the app asks
 for explicit location consent before requesting browser geolocation. Declining,
 or denying browser permission, leaves the public district visible in guest mode
@@ -105,14 +106,14 @@ active. Their maps refresh every 30 seconds. Entries older than 90 seconds are
 not displayed. Leaving the polygon, changing profiles, or signing out removes
 the user's location row when the app can reach Supabase.
 
-The profile owner controls the **Jagdmodus** checkbox. It is off by default and
-the UI states that enabling it also shares the owner's location. While off,
+The owner and Bearbeiter control the **Jagdmodus** checkbox. It is off by default
+and the UI states that enabling it also shares the current user's location. While off,
 shared profile markers remain available to members but live participant
 locations are hidden and cannot be written; switching it off also deletes all
 stored locations for that profile. Active clients poll the mode and stop location
-tracking after an owner changes it. Turning it on prompts members for location
-consent before tracking resumes. Rerun `schema.sql` to add the profile setting,
-owner-only RPC, and row-level security checks.
+tracking after an owner or Bearbeiter changes it. Turning it on prompts each
+participant for location consent before tracking resumes. Rerun `schema.sql` to
+add profile roles, role-aware RPCs, and row-level security checks.
 
 Temporary markers expire 48 hours after creation according to the database clock.
 RLS immediately hides expired rows; a pg_cron job deletes them every minute even
