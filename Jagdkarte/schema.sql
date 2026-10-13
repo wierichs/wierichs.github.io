@@ -114,8 +114,9 @@ as $$
   );
 $$;
 
+drop function if exists public.get_hunting_profile_participants(uuid);
 create or replace function public.get_hunting_profile_participants(p_profile_id uuid)
-returns table(participant_user_id uuid, participant_role text, display_name text)
+returns table(participant_user_id uuid, participant_role text, display_name text, participant_email text)
 language plpgsql stable security definer
 set search_path = ''
 as $$
@@ -124,14 +125,16 @@ begin
     raise exception 'Kein Zugriff auf dieses Revierprofil';
   end if;
   return query
-    select p.owner_id, 'owner'::text, up.display_name
+    select p.owner_id, 'owner'::text, up.display_name, owner.email
     from public.hunting_profiles p
     left join public.hunting_user_profiles up on up.user_id = p.owner_id
+    left join auth.users owner on owner.id = p.owner_id
     where p.id = p_profile_id
     union all
-    select m.user_id, m.role, up.display_name
+    select m.user_id, m.role, up.display_name, member.email
     from public.hunting_profile_members m
     left join public.hunting_user_profiles up on up.user_id = m.user_id
+    left join auth.users member on member.id = m.user_id
     where m.profile_id = p_profile_id;
 end;
 $$;

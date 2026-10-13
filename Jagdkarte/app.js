@@ -540,8 +540,8 @@ async function loadProfileLocations() {
   (data || []).forEach(location => {
     const participant = participantById.get(location.user_id);
     const role = participant?.participant_role || 'guest';
-    const displayName = participant?.display_name?.trim() || `Benutzer ${location.user_id.slice(0, 8)}`;
-    const roleLabel = role === 'owner' ? 'Chef' : role === 'editor' ? 'Bearbeiter' : 'Reviermitglied';
+    const displayName = participant?.display_name?.trim() || participant?.participant_email?.trim() ||
+      `Benutzer ${location.user_id.slice(0, 8)}`;
     const iconName = role === 'owner' ? 'crown' : role === 'editor' ? 'shield-check' : 'user-round';
     const roleClass = role === 'owner' ? 'person-location-owner' : role === 'editor' ? 'person-location-editor' : '';
     const marker = L.marker([location.latitude, location.longitude], {
@@ -557,17 +557,18 @@ async function loadProfileLocations() {
       const markerElement = marker.getElement();
       if (!markerElement) return;
       markerElement.setAttribute('role', 'img');
-      markerElement.setAttribute('aria-label', `${displayName}, ${roleLabel}`);
+      markerElement.setAttribute('aria-label', displayName);
       window.lucide?.createIcons({ root: markerElement });
     });
     const popup = document.createElement('div');
+    popup.className = 'profile-location-popup';
     const label = document.createElement('strong');
     label.textContent = displayName;
-    const roleDetail = document.createElement('span');
-    roleDetail.textContent = roleLabel;
     const time = document.createElement('span');
-    time.textContent = `Aktualisiert ${new Date(location.updated_at).toLocaleTimeString('de-DE')}; Genauigkeit ${Math.round(location.accuracy)} m`;
-    popup.append(label, roleDetail, time);
+    time.textContent = `Zuletzt aktualisiert: ${new Date(location.updated_at).toLocaleTimeString('de-DE')}`;
+    const accuracy = document.createElement('span');
+    accuracy.textContent = `Genauigkeit: ${Math.round(location.accuracy)} m`;
+    popup.append(label, time, accuracy);
     marker.bindPopup(popup).addTo(profileLocations);
   });
   element('location-key').hidden = !data?.length;

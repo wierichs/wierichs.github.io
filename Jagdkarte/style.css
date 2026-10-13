@@ -85,6 +85,8 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .profile-marker-popup { min-width: 150px; }
 .profile-marker-popup strong, .profile-marker-popup span { display: block; overflow-wrap: anywhere; }
 .profile-marker-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.profile-location-popup strong, .profile-location-popup span { display: block; overflow-wrap: anywhere; }
+.profile-location-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
 .profile-marker-popup button { margin-top: 9px; min-height: 32px; padding: 5px 8px; font-size: 12px; }
 .source-note { margin-top: auto; padding-top: 24px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .source-note span { flex-basis: 100%; }

@@ -97,8 +97,8 @@ location is inside the district. Members can delete their own temporary markers;
 owners and Bearbeiter can delete any marker.
 Each signed-in user can click their email address in the header to set an
 optional **Anzeigename** for shared-revier participants. Only members of a
-shared profile can retrieve participant names and its owner's email; blank names
-fall back to a shortened account ID. Shared saved revier entries show the owner
+shared profile can retrieve participant names and emails; blank names fall back
+to the participant's email, then a shortened account ID. Shared saved revier entries show the owner
 email after `@`. Owner and Bearbeiter locations use distinct crown and shield
 icons on the map. Rerun `schema.sql` to create the private account-name table
 and authorized lookup RPCs.
