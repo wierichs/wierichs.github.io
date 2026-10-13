@@ -254,6 +254,20 @@ function canEditProfile(profile = activeProfile) {
   return Boolean(user && profile && (profile.owner_id === user.id || profile.member_role === 'editor'));
 }
 
+async function loadOwnDisplayName() {
+  const userId = user?.id;
+  if (!userId || !supabaseClient) return;
+  const { data, error } = await supabaseClient.from('hunting_user_profiles')
+    .select('display_name').eq('user_id', userId).maybeSingle();
+  if (user?.id !== userId) return;
+  if (error) {
+    element('display-name-status').hidden = false;
+    element('display-name-status').textContent = `Anzeigename nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
+    return;
+  }
+  element('display-name').value = data?.display_name || '';
+}
+
 function resetMarkerPlacement() {
   placementMode = false;
   markerCoordinates = null;
@@ -271,6 +285,7 @@ function updateProfileControls() {
   element('invite-toggle').hidden = !canEdit;
   element('hunting-mode-control').hidden = !canEdit;
   element('owner-location-notice').hidden = !canEdit;
+  element('display-name-form').hidden = !Boolean(user && activeProfile);
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
   element('hunting-mode').disabled = huntingModePending;
   const availableTypes = markerTypes.filter(type => canEdit || type.temporary);
@@ -489,22 +504,34 @@ async function loadProfileLocations() {
     return;
   }
   const freshAfter = new Date(Date.now() - 90000).toISOString();
-  const { data, error } = await supabaseClient.from('hunting_profile_locations')
-    .select('user_id,latitude,longitude,accuracy,updated_at')
-    .eq('profile_id', activeProfile.id).gte('updated_at', freshAfter);
+  const profileId = activeProfile.id;
+  const [{ data, error }, { data: participants, error: participantError }] = await Promise.all([
+    supabaseClient.from('hunting_profile_locations')
+      .select('user_id,latitude,longitude,accuracy,updated_at')
+      .eq('profile_id', profileId).gte('updated_at', freshAfter),
+    supabaseClient.rpc('get_hunting_profile_participants', { p_profile_id: profileId })
+  ]);
   if (revision !== presenceRevision || !activeProfile || !user) return;
   profileLocations.clearLayers();
   element('location-key').hidden = true;
-  if (error) {
+  if (error || participantError) {
     element('presence-status').hidden = false;
-    element('presence-status').textContent = `Standorte nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
+    const cause = error || participantError;
+    element('presence-status').textContent = `Standorte nicht verfuegbar. Datenbankschema aktualisieren. (${cause.message})`;
     return;
   }
+  const participantById = new Map((participants || []).map(participant => [participant.participant_user_id, participant]));
   (data || []).forEach(location => {
+    const participant = participantById.get(location.user_id);
+    const role = participant?.participant_role || 'guest';
+    const displayName = participant?.display_name?.trim() || `Benutzer ${location.user_id.slice(0, 8)}`;
+    const roleLabel = role === 'owner' ? 'Chef' : role === 'editor' ? 'Bearbeiter' : 'Reviermitglied';
+    const iconName = role === 'owner' ? 'crown' : role === 'editor' ? 'shield-check' : 'user-round';
+    const roleClass = role === 'owner' ? 'person-location-owner' : role === 'editor' ? 'person-location-editor' : '';
     const marker = L.marker([location.latitude, location.longitude], {
       icon: L.divIcon({
         className: 'profile-location-marker',
-        html: '<span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span>',
+        html: `<span class="person-location-swatch ${roleClass}"><i data-lucide="${iconName}" aria-hidden="true"></i></span>`,
         iconSize: [36, 36],
         iconAnchor: [18, 18],
         popupAnchor: [0, -18]
@@ -514,15 +541,17 @@ async function loadProfileLocations() {
       const markerElement = marker.getElement();
       if (!markerElement) return;
       markerElement.setAttribute('role', 'img');
-      markerElement.setAttribute('aria-label', `Benutzer ${location.user_id.slice(0, 8)}`);
+      markerElement.setAttribute('aria-label', `${displayName}, ${roleLabel}`);
       window.lucide?.createIcons({ root: markerElement });
     });
     const popup = document.createElement('div');
     const label = document.createElement('strong');
-    label.textContent = `Benutzer ${location.user_id.slice(0, 8)}`;
+    label.textContent = displayName;
+    const roleDetail = document.createElement('span');
+    roleDetail.textContent = roleLabel;
     const time = document.createElement('span');
     time.textContent = `Aktualisiert ${new Date(location.updated_at).toLocaleTimeString('de-DE')}; Genauigkeit ${Math.round(location.accuracy)} m`;
-    popup.append(label, time);
+    popup.append(label, roleDetail, time);
     marker.bindPopup(popup).addTo(profileLocations);
   });
   element('location-key').hidden = !data?.length;
@@ -633,6 +662,7 @@ async function activateProfile(profile) {
     activeProfile = profile;
     element('profile-list').value = profile.id;
     updateProfileControls();
+    void loadOwnDisplayName();
     await registerProfileBoundary(profile);
     if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
     await loadProfileMarkers();
@@ -648,6 +678,7 @@ async function activateProfile(profile) {
   activeProfile = profile;
   element('profile-list').value = profile.id;
   updateProfileControls();
+  void loadOwnDisplayName();
   await registerProfileBoundary(profile);
   if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
   await loadProfileMarkers();
@@ -725,7 +756,10 @@ async function loadProfiles(preferredId) {
   const preferredProfile = profiles.find(profile => profile.id === preferredId);
   activeProfile = preferredId ? (preferredProfile?.owner_id === user.id ? preferredProfile : null)
     : profiles.find(profile => profile.owner_id === user.id) || null;
-  if (activeProfile) profileSelect.value = activeProfile.id;
+  if (activeProfile) {
+    profileSelect.value = activeProfile.id;
+    void loadOwnDisplayName();
+  }
   profileSelect.hidden = profiles.length === 0;
   profileStatus(profiles.length ? `${profiles.length} unabhaengige(s) Revierprofil(e).` : 'Noch kein Profil fuer dieses Revier.');
   if (preferredId && !preferredProfile) profileStatus('Dieses Profil ist nicht mehr zugreifbar.');
@@ -763,6 +797,7 @@ function clearSelection() {
   resetMarkerPlacement();
   element('profile-list').replaceChildren();
   element('profile-list').hidden = true;
+  element('display-name-form').hidden = true;
   element('hunting-mode-control').hidden = true;
   element('presence-status').hidden = true;
   element('invite-form').hidden = true;
@@ -1073,6 +1108,27 @@ element('claim-profile').addEventListener('click', async () => {
 element('profile-list').addEventListener('change', async event => {
   const profile = profiles.find(candidate => candidate.id === event.target.value) || null;
   await chooseProfile(profile);
+});
+element('display-name-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!user || !supabaseClient || !activeProfile) return;
+  const userId = user.id;
+  const displayName = element('display-name').value.trim();
+  const button = element('display-name-form').querySelector('button[type="submit"]');
+  button.disabled = true;
+  element('display-name-status').hidden = true;
+  const { error } = await supabaseClient.from('hunting_user_profiles').upsert({
+    user_id: userId,
+    display_name: displayName || null,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'user_id' });
+  button.disabled = false;
+  if (user?.id !== userId) return;
+  element('display-name-status').hidden = false;
+  element('display-name-status').textContent = error
+    ? `Anzeigename konnte nicht gespeichert werden: ${error.message}`
+    : displayName ? 'Anzeigename gespeichert.' : 'Anzeigename entfernt.';
+  if (!error && activeProfile?.hunting_mode) void loadProfileLocations();
 });
 element('hunting-mode').addEventListener('change', async event => {
   const profile = activeProfile;

@@ -57,6 +57,11 @@
           <p id="profile-status" role="status" aria-live="polite">Lade Profile ...</p>
           <label for="profile-list">Profil fuer dieses Revier</label>
           <select id="profile-list" aria-label="Profil fuer dieses Revier"></select>
+          <form id="display-name-form" hidden>
+            <label for="display-name">Anzeigename fuer Reviermitglieder</label>
+            <div class="display-name-row"><input id="display-name" maxlength="60" autocomplete="nickname" placeholder="Optional"><button class="icon-button" type="submit" title="Anzeigenamen speichern" aria-label="Anzeigenamen speichern"><i data-lucide="save" aria-hidden="true"></i></button></div>
+            <p id="display-name-status" role="status" aria-live="polite" hidden></p>
+          </form>
           <label id="hunting-mode-control" class="toggle" hidden><input id="hunting-mode" type="checkbox"> Jagdmodus</label>
           <p id="owner-location-notice" hidden>Im Jagdmodus wird auch dein Standort mit den Reviermitgliedern geteilt.</p>
           <p id="presence-status" role="status" aria-live="polite" hidden></p>
@@ -88,7 +93,7 @@
     <section id="map-surface" class="map-surface" aria-label="Karte">
       <div id="map" aria-label="OpenStreetMap-Karte"></div>
       <div class="map-toolbar"><button id="locate" class="icon-button" title="Mein Standort" aria-label="Mein Standort"><i data-lucide="locate-fixed" aria-hidden="true"></i></button><button id="fit" class="icon-button" title="Revier einpassen" aria-label="Revier einpassen" disabled><i data-lucide="scan" aria-hidden="true"></i></button><button id="fullscreen-map" class="icon-button" type="button" title="Karte im Vollbild anzeigen" aria-label="Karte im Vollbild anzeigen" aria-pressed="false"><i id="fullscreen-enter-icon" data-lucide="expand" aria-hidden="true"></i><i id="fullscreen-exit-icon" data-lucide="minimize-2" aria-hidden="true" hidden></i></button><button id="update-app" class="icon-button" type="button" title="Neue Version verfuegbar. App aktualisieren" aria-label="App aktualisieren" hidden><i data-lucide="refresh-cw" aria-hidden="true"></i></button><button id="install" class="icon-button" title="App installieren" aria-label="App installieren" hidden><i data-lucide="monitor-down" aria-hidden="true"></i></button></div>
-      <div class="map-key"><span class="boundary-swatch"></span> Jagdbezirksgrenze <span id="location-key" hidden><span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span> Reviermitglied</span></div>
+      <div class="map-key"><span class="boundary-swatch"></span> Jagdbezirksgrenze <span id="location-key" hidden><span class="location-legend-item"><span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span> Mitglied</span><span class="location-legend-item"><span class="person-location-swatch person-location-editor"><i data-lucide="shield-check" aria-hidden="true"></i></span> Bearbeiter</span><span class="location-legend-item"><span class="person-location-swatch person-location-owner"><i data-lucide="crown" aria-hidden="true"></i></span> Chef</span></span></div>
       <div id="marker-instruction" role="status" hidden>Position fuer die Markierung auf der Karte waehlen.</div>
       <div id="map-status" hidden><span id="map-status-text" role="status" aria-live="polite"></span><button id="close-map-status" class="icon-button" type="button" title="Meldung schliessen" aria-label="Meldung schliessen" hidden><i data-lucide="x" aria-hidden="true"></i></button></div>
     </section>

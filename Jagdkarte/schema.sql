@@ -57,6 +57,12 @@ create table if not exists public.hunting_profile_locations (
   primary key (profile_id, user_id)
 );
 
+create table if not exists public.hunting_user_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  display_name text check (display_name is null or length(trim(display_name)) between 1 and 60),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.hunting_markers
   add column if not exists type_id text not null default 'sonstiges'
   check (type_id ~ '^[a-z0-9][a-z0-9_-]{0,39}$');
@@ -106,6 +112,28 @@ as $$
     select 1 from public.hunting_profile_members m
     where m.profile_id = profile_uuid and m.user_id = (select auth.uid()) and m.role = 'editor'
   );
+$$;
+
+create or replace function public.get_hunting_profile_participants(p_profile_id uuid)
+returns table(participant_user_id uuid, participant_role text, display_name text)
+language plpgsql stable security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not public.can_view_hunting_profile(p_profile_id) then
+    raise exception 'Kein Zugriff auf dieses Revierprofil';
+  end if;
+  return query
+    select p.owner_id, 'owner'::text, up.display_name
+    from public.hunting_profiles p
+    left join public.hunting_user_profiles up on up.user_id = p.owner_id
+    where p.id = p_profile_id
+    union all
+    select m.user_id, m.role, up.display_name
+    from public.hunting_profile_members m
+    left join public.hunting_user_profiles up on up.user_id = m.user_id
+    where m.profile_id = p_profile_id;
+end;
 $$;
 
 create or replace function public.hunting_mode_is_enabled(profile_uuid uuid)
@@ -331,6 +359,18 @@ alter table public.hunting_profile_members enable row level security;
 alter table public.hunting_profile_invitations enable row level security;
 alter table public.hunting_markers enable row level security;
 alter table public.hunting_profile_locations enable row level security;
+alter table public.hunting_user_profiles enable row level security;
+
+drop policy if exists "Users can view their own display name" on public.hunting_user_profiles;
+create policy "Users can view their own display name" on public.hunting_user_profiles
+  for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "Users can create their own display name" on public.hunting_user_profiles;
+create policy "Users can create their own display name" on public.hunting_user_profiles
+  for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "Users can update their own display name" on public.hunting_user_profiles;
+create policy "Users can update their own display name" on public.hunting_user_profiles
+  for update to authenticated using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 
 drop policy if exists "Profiles visible to owner and invited members" on public.hunting_profiles;
 create policy "Profiles visible to owner and invited members" on public.hunting_profiles
@@ -381,14 +421,16 @@ create policy "Users can remove their own profile location" on public.hunting_pr
 
 revoke all on public.hunting_profiles, public.hunting_profile_members,
   public.hunting_profile_invitations, public.hunting_markers,
-  public.hunting_profile_locations from public, anon, authenticated;
+  public.hunting_profile_locations, public.hunting_user_profiles from public, anon, authenticated;
 grant select, delete on public.hunting_profiles to authenticated;
 grant select on public.hunting_profile_members to authenticated;
 grant select, insert, delete on public.hunting_markers to authenticated;
 grant select, insert, update, delete on public.hunting_profile_locations to authenticated;
+grant select, insert, update on public.hunting_user_profiles to authenticated;
 revoke all on function public.can_view_hunting_profile(uuid) from public, anon;
 revoke all on function public.owns_hunting_profile(uuid) from public, anon;
 revoke all on function public.can_edit_hunting_profile(uuid) from public, anon;
+revoke all on function public.get_hunting_profile_participants(uuid) from public, anon;
 revoke all on function public.hunting_mode_is_enabled(uuid) from public, anon;
 revoke all on function public.require_hunting_mode_for_location() from public, anon, authenticated;
 revoke all on function public.set_hunting_mode(uuid, boolean) from public, anon, authenticated;
@@ -398,6 +440,7 @@ revoke all on function public.accept_hunting_profile_invitations() from public, 
 grant execute on function public.can_view_hunting_profile(uuid) to authenticated;
 grant execute on function public.owns_hunting_profile(uuid) to authenticated;
 grant execute on function public.can_edit_hunting_profile(uuid) to authenticated;
+grant execute on function public.get_hunting_profile_participants(uuid) to authenticated;
 grant execute on function public.hunting_mode_is_enabled(uuid) to authenticated;
 grant execute on function public.set_hunting_mode(uuid, boolean) to authenticated;
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;

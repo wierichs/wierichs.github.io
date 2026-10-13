@@ -74,6 +74,10 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #presence-status { margin: 8px 0; }
 .profile-section label { margin-top: 10px; }
 .profile-section select, .profile-section input { margin-bottom: 8px; }
+.display-name-row { display: flex; align-items: center; gap: 8px; }
+.display-name-row input { flex: 1; margin-bottom: 0; }
+.display-name-row button { flex: 0 0 42px; }
+#display-name-status { margin: 6px 0; }
 .profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 #invite-form, #marker-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 #marker-instruction { position: absolute; top: 70px; right: 16px; z-index: 500; max-width: min(360px, calc(100% - 32px)); padding: 12px 14px; background: white; box-shadow: 0 2px 8px #20342826; font-size: 13px; }
@@ -88,12 +92,15 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #map { width: 100%; height: 100%; }
 .map-toolbar { position: absolute; right: 16px; top: 16px; z-index: 500; display: flex; gap: 8px; }
 .map-toolbar button { box-shadow: 0 2px 8px #20342826; }
-.map-key { position: absolute; left: 16px; bottom: 28px; z-index: 500; padding: 8px 12px; background: #fffffff0; font-size: 12px; display: flex; gap: 8px; align-items: center; pointer-events: none; }
+.map-key { position: absolute; left: 16px; bottom: 28px; z-index: 500; max-width: calc(100% - 32px); padding: 8px 12px; background: #fffffff0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; pointer-events: none; }
 .boundary-swatch { width: 22px; height: 12px; border: 2px solid var(--accent); background: #c43b5520; }
 .profile-location-marker.leaflet-div-icon { border: 0; background: transparent; }
 .person-location-swatch { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 2px solid white; border-radius: 50%; background: var(--green); color: white; box-shadow: 0 1px 5px #20342880; }
+.person-location-editor { background: #257aa5; }
+.person-location-owner { background: var(--accent); }
 .person-location-swatch svg { width: 18px; height: 18px; stroke: currentColor; }
-#location-key { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+#location-key { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; white-space: normal; }
+#location-key .location-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 #location-key .person-location-swatch { width: 22px; height: 22px; flex: 0 0 22px; }
 #location-key .person-location-swatch svg { width: 14px; height: 14px; }
 #map-status { position: absolute; top: 70px; right: 16px; z-index: 500; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(360px, calc(100% - 32px)); background: white; padding: 8px 12px; font-size: 13px; box-shadow: 0 2px 8px #20342826; }
