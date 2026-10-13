@@ -125,13 +125,13 @@ begin
     raise exception 'Kein Zugriff auf dieses Revierprofil';
   end if;
   return query
-    select p.owner_id, 'owner'::text, up.display_name, owner.email
+    select p.owner_id, 'owner'::text, up.display_name, owner.email::text
     from public.hunting_profiles p
     left join public.hunting_user_profiles up on up.user_id = p.owner_id
     left join auth.users owner on owner.id = p.owner_id
     where p.id = p_profile_id
     union all
-    select m.user_id, m.role, up.display_name, member.email
+    select m.user_id, m.role, up.display_name, member.email::text
     from public.hunting_profile_members m
     left join public.hunting_user_profiles up on up.user_id = m.user_id
     left join auth.users member on member.id = m.user_id

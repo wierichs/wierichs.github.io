@@ -530,13 +530,13 @@ async function loadProfileLocations() {
   if (revision !== presenceRevision || !activeProfile || !user) return;
   profileLocations.clearLayers();
   element('location-key').hidden = true;
-  if (error || participantError) {
+  if (error) {
     element('presence-status').hidden = false;
-    const cause = error || participantError;
-    element('presence-status').textContent = `Standorte nicht verfuegbar. Datenbankschema aktualisieren. (${cause.message})`;
+    element('presence-status').textContent = `Standorte nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
     return;
   }
-  const participantById = new Map((participants || []).map(participant => [participant.participant_user_id, participant]));
+  const participantById = new Map((participantError ? [] : participants || [])
+    .map(participant => [participant.participant_user_id, participant]));
   (data || []).forEach(location => {
     const participant = participantById.get(location.user_id);
     const role = participant?.participant_role || 'guest';
@@ -574,7 +574,7 @@ async function loadProfileLocations() {
   element('location-key').hidden = !data?.length;
   element('presence-status').hidden = false;
   element('presence-status').textContent = data?.length
-    ? `${data.length} aktuelle Standortfreigabe${data.length === 1 ? '' : 'n'} im Revier.`
+    ? `${data.length} aktuelle Standortfreigabe${data.length === 1 ? '' : 'n'} im Revier.${participantError ? ' Namen und Rollen sind derzeit nicht verfuegbar.' : ''}`
     : 'Aktuell keine Benutzer im Revier.';
 }
 
