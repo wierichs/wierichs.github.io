@@ -48,9 +48,11 @@ let locationRequestPending = false;
 let sharingProfileId = null;
 let sharedLocationIsInBoundary = false;
 let presenceInterval = null;
+let huntingModeInterval = null;
 let presenceRevision = 0;
 let profileActivationRevision = 0;
 let pendingProfileId = null;
+let huntingModePending = false;
 const profileMarkers = L.layerGroup().addTo(map);
 const profileLocations = L.layerGroup().addTo(map);
 
@@ -157,7 +159,7 @@ async function loadSavedProfiles() {
   element('saved-status').textContent = 'Gespeicherte Reviere werden geladen ...';
   try {
     const { data, error } = await supabaseClient.from('hunting_profiles')
-      .select('id,source_id,feature_id,district_name,owner_id,created_at').order('district_name');
+      .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode').order('district_name');
     if (revision !== savedProfilesRevision || user?.id !== userId) return;
     if (error) throw new Error(error.message);
     savedProfiles = data || [];
@@ -253,10 +255,14 @@ function resetMarkerPlacement() {
 }
 
 function updateProfileControls() {
-  const ownProfile = activeProfile?.owner_id === user?.id;
+  const ownProfile = Boolean(user && activeProfile && activeProfile.owner_id === user.id);
   const canCreate = Boolean(user && selected && selectedFeatureId());
   element('claim-profile').hidden = !canCreate || profiles.some(profile => profile.owner_id === user.id);
   element('invite-toggle').hidden = !ownProfile;
+  element('hunting-mode-control').hidden = !ownProfile;
+  element('owner-location-notice').hidden = !ownProfile;
+  element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
+  element('hunting-mode').disabled = huntingModePending;
   const availableTypes = markerTypes.filter(type => ownProfile || type.temporary);
   element('add-marker').hidden = !user || !activeProfile || availableTypes.length === 0;
   const select = element('marker-type');
@@ -398,17 +404,24 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && activeProfile && user) void loadProfileMarkers();
 });
 
-async function stopProfileLocation() {
+function pauseProfileLocation() {
   if (locationInterval !== null) clearInterval(locationInterval);
   locationInterval = null;
   locationRequestPending = false;
-  const previousProfileId = sharingProfileId;
   sharingProfileId = null;
   sharedLocationIsInBoundary = false;
   if (presenceInterval !== null) clearInterval(presenceInterval);
   presenceInterval = null;
   presenceRevision += 1;
   profileLocations.clearLayers();
+  element('location-key').hidden = true;
+}
+
+async function stopProfileLocation() {
+  const previousProfileId = sharingProfileId;
+  pauseProfileLocation();
+  if (huntingModeInterval !== null) clearInterval(huntingModeInterval);
+  huntingModeInterval = null;
   if (previousProfileId && user && supabaseClient) {
     const { error } = await supabaseClient.from('hunting_profile_locations').delete()
       .eq('profile_id', previousProfileId).eq('user_id', user.id);
@@ -416,9 +429,55 @@ async function stopProfileLocation() {
   }
 }
 
+function startPresenceUpdates() {
+  if (presenceInterval !== null) clearInterval(presenceInterval);
+  void loadProfileLocations();
+  presenceInterval = setInterval(() => void loadProfileLocations(), 30000);
+}
+
+function updateHuntingMode(profile, enabled) {
+  profile.hunting_mode = enabled;
+  if (activeProfile?.id === profile.id) activeProfile.hunting_mode = enabled;
+  updateProfileControls();
+  if (!enabled) {
+    const previousProfileId = sharingProfileId;
+    pauseProfileLocation();
+    if (previousProfileId && user) void supabaseClient.from('hunting_profile_locations').delete()
+      .eq('profile_id', previousProfileId).eq('user_id', user.id);
+    element('presence-status').hidden = false;
+    element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
+  } else if (profile.owner_id === user?.id) {
+    element('presence-status').hidden = false;
+    element('presence-status').textContent = 'Jagdmodus aktiv. Dein Standort und Teilnehmerstandorte werden geteilt.';
+    startPresenceUpdates();
+    void startProfileLocationSharing(profile);
+  } else {
+    pendingProfileId = profile.id;
+    element('profile-list').value = '';
+    element('location-consent-dialog').showModal();
+  }
+}
+
+function startHuntingModeUpdates(profile) {
+  if (huntingModeInterval !== null) clearInterval(huntingModeInterval);
+  huntingModeInterval = setInterval(async () => {
+    if (!activeProfile || activeProfile.id !== profile.id || !supabaseClient) return;
+    const { data, error } = await supabaseClient.from('hunting_profiles')
+      .select('hunting_mode').eq('id', profile.id).maybeSingle();
+    if (error || !data || activeProfile?.id !== profile.id) return;
+    const enabled = Boolean(data.hunting_mode);
+    if (enabled !== Boolean(activeProfile.hunting_mode)) updateHuntingMode(profile, enabled);
+  }, 10000);
+}
+
 async function loadProfileLocations() {
   const revision = ++presenceRevision;
   if (!activeProfile || !user || !supabaseClient) return;
+  if (!activeProfile.hunting_mode) {
+    profileLocations.clearLayers();
+    element('location-key').hidden = true;
+    return;
+  }
   const freshAfter = new Date(Date.now() - 90000).toISOString();
   const { data, error } = await supabaseClient.from('hunting_profile_locations')
     .select('user_id,latitude,longitude,accuracy,updated_at')
@@ -463,53 +522,18 @@ async function loadProfileLocations() {
     : 'Aktuell keine Benutzer im Revier.';
 }
 
-async function activateProfile(profile) {
-  const revision = ++profileActivationRevision;
-  await stopProfileLocation();
-  if (revision !== profileActivationRevision) return;
-  activeProfile = null;
-  element('profile-list').value = '';
-  element('presence-status').hidden = true;
-  updateProfileControls();
-  if (!profile) {
-    clearProfileMarkers();
-    element('presence-status').hidden = true;
-    profileStatus('Du siehst dieses Revier wie ein Gast.');
-    return;
-  }
-  if (profile.owner_id === user?.id) {
-    activeProfile = profile;
-    element('profile-list').value = profile.id;
-    updateProfileControls();
-    await registerProfileBoundary(profile);
-    if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
-    await loadProfileMarkers();
-    element('presence-status').hidden = false;
-    void loadProfileLocations();
-    presenceInterval = setInterval(() => void loadProfileLocations(), 30000);
-    return;
-  }
+async function startProfileLocationSharing(profile) {
   if (!navigator.geolocation) {
-    profileStatus('Standortfreigabe nicht verfuegbar. Das Revier wird wie fuer einen Gast angezeigt.');
+    profileStatus('Standortfreigabe im Browser nicht verfuegbar. Revierprofile bleiben sichtbar.');
     return;
   }
   sharingProfileId = profile.id;
   const { error: clearError } = await supabaseClient.from('hunting_profile_locations').delete()
     .eq('profile_id', profile.id).eq('user_id', user.id);
-  if (revision !== profileActivationRevision) return;
+  if (sharingProfileId !== profile.id || !activeProfile?.hunting_mode) return;
   if (clearError) profileStatus(`Vorherige Standortfreigabe konnte nicht entfernt werden: ${clearError.message}`);
   const updateSharedLocation = async position => {
-    if (sharingProfileId !== profile.id || !user) return;
-    if (activeProfile?.id !== profile.id) {
-      activeProfile = profile;
-      element('profile-list').value = profile.id;
-      updateProfileControls();
-      void loadProfileMarkers();
-      element('presence-status').hidden = false;
-      void loadProfileLocations();
-      presenceInterval = setInterval(() => void loadProfileLocations(), 30000);
-      profileStatus('Standortfreigabe aktiv. Mitglieder dieses Revierprofils sehen einander.');
-    }
+    if (sharingProfileId !== profile.id || !user || !activeProfile?.hunting_mode) return;
     const point = { lat: position.coords.latitude, lng: position.coords.longitude };
     if (!pointInSelectedFeature(point)) {
       if (sharedLocationIsInBoundary) {
@@ -530,23 +554,88 @@ async function activateProfile(profile) {
       updated_at: new Date().toISOString()
     }, { onConflict: 'profile_id,user_id' });
     if (error) profileStatus(`Standort konnte nicht uebermittelt werden: ${error.message}. Datenbankschema aus schema.sql pruefen.`);
+    else if (profile.owner_id === user.id) void loadProfileLocations();
   };
   const requestLocation = () => {
-    if (sharingProfileId !== profile.id || locationRequestPending) return;
+    if (sharingProfileId !== profile.id || locationRequestPending || !activeProfile?.hunting_mode) return;
     locationRequestPending = true;
     navigator.geolocation.getCurrentPosition(position => {
       locationRequestPending = false;
       void updateSharedLocation(position);
     }, error => {
       locationRequestPending = false;
-    if (sharingProfileId !== profile.id) return;
-    if (error.code === 1) void rejectProfileSelection(profile, 'Standortzugriff abgelehnt. Das Revier wird wie fuer einen Gast angezeigt.');
-    else profileStatus('Warte auf eine verfuegbare Standortbestimmung.');
+      if (sharingProfileId !== profile.id) return;
+      if (error.code === 1 && profile.owner_id === user?.id) {
+        clearInterval(locationInterval);
+        locationInterval = null;
+        sharingProfileId = null;
+        sharedLocationIsInBoundary = false;
+        void supabaseClient.from('hunting_profile_locations').delete()
+          .eq('profile_id', profile.id).eq('user_id', user.id);
+        profileStatus('Standortzugriff abgelehnt. Jagdmodus bleibt fuer die Gruppe aktiv, dein Standort wird nicht geteilt.');
+      } else if (error.code === 1) {
+        void rejectProfileSelection(profile, 'Standortzugriff abgelehnt. Das Revier wird wie fuer einen Gast angezeigt.');
+      } else {
+        profileStatus('Warte auf eine verfuegbare Standortbestimmung.');
+      }
     }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
   };
   profileStatus('Browser-Standortfreigabe wird angefordert ...');
   requestLocation();
   locationInterval = setInterval(requestLocation, 30000);
+}
+
+async function activateProfile(profile) {
+  const revision = ++profileActivationRevision;
+  await stopProfileLocation();
+  if (revision !== profileActivationRevision) return;
+  const { data: modeData, error: modeError } = await supabaseClient.from('hunting_profiles')
+    .select('hunting_mode').eq('id', profile.id).maybeSingle();
+  if (revision !== profileActivationRevision) return;
+  if (modeError || !modeData) {
+    profileStatus(`Jagdmodus konnte nicht geladen werden: ${modeError?.message || 'Profil nicht verfuegbar'}`);
+    return;
+  }
+  profile.hunting_mode = Boolean(modeData.hunting_mode);
+  activeProfile = null;
+  element('profile-list').value = '';
+  element('presence-status').hidden = true;
+  updateProfileControls();
+  if (!profile) {
+    clearProfileMarkers();
+    element('presence-status').hidden = true;
+    profileStatus('Du siehst dieses Revier wie ein Gast.');
+    return;
+  }
+  if (profile.owner_id === user?.id) {
+    activeProfile = profile;
+    element('profile-list').value = profile.id;
+    updateProfileControls();
+    await registerProfileBoundary(profile);
+    if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
+    await loadProfileMarkers();
+    element('presence-status').hidden = false;
+    startHuntingModeUpdates(profile);
+    if (profile.hunting_mode) {
+      startPresenceUpdates();
+      void startProfileLocationSharing(profile);
+    }
+    else element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
+    return;
+  }
+  activeProfile = profile;
+  element('profile-list').value = profile.id;
+  updateProfileControls();
+  await loadProfileMarkers();
+  if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
+  element('presence-status').hidden = false;
+  startHuntingModeUpdates(profile);
+  if (!profile.hunting_mode) {
+    element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
+    return;
+  }
+  startPresenceUpdates();
+  void startProfileLocationSharing(profile);
 }
 
 async function rejectProfileSelection(profile, message) {
@@ -577,7 +666,7 @@ async function loadProfiles(preferredId) {
   }
   profileStatus('Profile werden geladen ...');
   const { data, error } = await supabaseClient.from('hunting_profiles')
-    .select('id,source_id,feature_id,district_name,owner_id,created_at')
+    .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode')
     .eq('source_id', source.id).eq('feature_id', featureId).order('created_at');
   if (revision !== profileRevision) return;
   if (error) {
@@ -611,8 +700,12 @@ async function loadProfiles(preferredId) {
   await loadProfileMarkers();
   if (activeProfile?.owner_id === user.id) {
     element('presence-status').hidden = false;
-    void loadProfileLocations();
-    presenceInterval = setInterval(() => void loadProfileLocations(), 10000);
+    startHuntingModeUpdates(activeProfile);
+    if (activeProfile.hunting_mode) {
+      startPresenceUpdates();
+      void startProfileLocationSharing(activeProfile);
+    }
+    else element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
   }
   if (preferredProfile && preferredProfile.owner_id !== user?.id) await chooseProfile(preferredProfile);
 }
@@ -635,6 +728,7 @@ function clearSelection() {
   resetMarkerPlacement();
   element('profile-list').replaceChildren();
   element('profile-list').hidden = true;
+  element('hunting-mode-control').hidden = true;
   element('presence-status').hidden = true;
   element('invite-form').hidden = true;
   element('invite-toggle').hidden = true;
@@ -941,6 +1035,24 @@ element('profile-list').addEventListener('change', async event => {
   const profile = profiles.find(candidate => candidate.id === event.target.value) || null;
   await chooseProfile(profile);
 });
+element('hunting-mode').addEventListener('change', async event => {
+  const profile = activeProfile;
+  if (!profile || profile.owner_id !== user?.id || !supabaseClient) return;
+  const enabled = event.currentTarget.checked;
+  huntingModePending = true;
+  updateProfileControls();
+  const { error } = await supabaseClient.rpc('set_hunting_mode', {
+    p_profile_id: profile.id,
+    p_enabled: enabled
+  });
+  huntingModePending = false;
+  if (error) {
+    updateProfileControls();
+    profileStatus(`Jagdmodus konnte nicht geaendert werden: ${error.message}. Datenbankschema aus schema.sql aktualisieren.`);
+    return;
+  }
+  updateHuntingMode(profile, enabled);
+});
 
 async function chooseProfile(profile) {
   const revision = ++profileActivationRevision;
@@ -960,6 +1072,10 @@ async function chooseProfile(profile) {
     await activateProfile(profile);
     return;
   }
+  if (!profile.hunting_mode) {
+    await activateProfile(profile);
+    return;
+  }
   element('presence-status').hidden = true;
   pendingProfileId = profile.id;
   element('profile-list').value = '';
@@ -973,6 +1089,7 @@ element('accept-location').addEventListener('click', () => {
 });
 function declineProfileLocation() {
   profileActivationRevision += 1;
+  void stopProfileLocation();
   pendingProfileId = null;
   element('location-consent-dialog').close();
   element('profile-list').value = '';

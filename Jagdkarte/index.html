@@ -57,6 +57,8 @@
           <p id="profile-status" role="status" aria-live="polite">Lade Profile ...</p>
           <label for="profile-list">Profil fuer dieses Revier</label>
           <select id="profile-list" aria-label="Profil fuer dieses Revier"></select>
+          <label id="hunting-mode-control" class="toggle" hidden><input id="hunting-mode" type="checkbox"> Jagdmodus</label>
+          <p id="owner-location-notice" hidden>Im Jagdmodus wird auch dein Standort mit den Reviermitgliedern geteilt.</p>
           <p id="presence-status" role="status" aria-live="polite" hidden></p>
           <div class="profile-actions">
             <button id="invite-toggle" type="button" hidden>Benutzer einladen</button>
@@ -98,7 +100,7 @@
   </dialog>
   <dialog id="location-consent-dialog" aria-labelledby="location-consent-title">
     <div class="dialog-heading"><h2 id="location-consent-title">Standortfreigabe</h2></div>
-    <p>Wenn du dieses geteilte Revier auswaehlst, wird dein Standort nur waehrend der Auswahl und nur innerhalb der Reviergrenze an die Mitglieder dieses Revierprofils uebermittelt. Sie sehen deine aktuelle Position. Die Uebermittlung erfolgt alle 30 Sekunden. Beim Verlassen der Grenze oder Abwaehlen wird der gespeicherte Standort geloescht. Ohne Zustimmung nutzt du die Jagdkarte wie ein Gast.</p>
+    <p>Wenn du dieses geteilte Revier auswaehlst und der Owner den Jagdmodus aktiviert hat, wird dein Standort nur innerhalb der Reviergrenze an die Mitglieder dieses Revierprofils uebermittelt. Sie sehen deine aktuelle Position. Die Uebermittlung erfolgt alle 30 Sekunden. Beim Ausschalten des Jagdmodus, Verlassen der Grenze oder Abwaehlen wird der gespeicherte Standort geloescht. Ohne Zustimmung nutzt du die Jagdkarte wie ein Gast.</p>
     <div class="profile-actions"><button id="decline-location" type="button">Als Gast ansehen</button><button id="accept-location" class="primary" type="button">Zustimmen und fortfahren</button></div>
   </dialog>
   <noscript>Diese Kartenanwendung benoetigt JavaScript.</noscript>

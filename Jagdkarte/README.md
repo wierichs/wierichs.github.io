@@ -94,8 +94,25 @@ profiles for the same district. Only owners can create and delete permanent
 markers. Owners and invited members can create **Anschuss** and **Wildsichtung**
 markers while their current browser-reported location is inside the district.
 Members can also delete their own temporary markers; owners can delete any marker.
-When an invitee selects a shared profile, the app asks for explicit location consent before requesting browser geolocation. Declining, or denying browser permission, leaves the public district visible in guest mode without profile data. With consent, the first fix is sent immediately and the location is refreshed every 30 seconds only while it is inside the selected polygon. The owner and invited members of that profile can see one another; their maps also refresh every 30 seconds. Entries older than 90 seconds are not displayed. Leaving the polygon, changing profiles, or
-signing out removes the user's location row when the app can reach Supabase.
+When an invitee selects a shared profile while Jagdmodus is active, the app asks
+for explicit location consent before requesting browser geolocation. Declining,
+or denying browser permission, leaves the public district visible in guest mode
+without profile data. With consent, the first fix is sent immediately and the
+location is refreshed every 30 seconds only while it is inside the selected
+polygon. Profile members and the owner can see current shared participant
+locations; the owner also shares their own current position while Jagdmodus is
+active. Their maps refresh every 30 seconds. Entries older than 90 seconds are
+not displayed. Leaving the polygon, changing profiles, or signing out removes
+the user's location row when the app can reach Supabase.
+
+The profile owner controls the **Jagdmodus** checkbox. It is off by default and
+the UI states that enabling it also shares the owner's location. While off,
+shared profile markers remain available to members but live participant
+locations are hidden and cannot be written; switching it off also deletes all
+stored locations for that profile. Active clients poll the mode and stop location
+tracking after an owner changes it. Turning it on prompts members for location
+consent before tracking resumes. Rerun `schema.sql` to add the profile setting,
+owner-only RPC, and row-level security checks.
 
 Temporary markers expire 48 hours after creation according to the database clock.
 RLS immediately hides expired rows; a pg_cron job deletes them every minute even
@@ -187,6 +204,18 @@ The configured `limit=500` currently covers every feature in each collection;
 the counts can change as publishers update their data. These checks confirm the
 published response, not legal completeness or current field conditions.
 
+Five more NRW regions are available from the endpoints in `Endpunkte_NRW.csv`:
+Ennepe-Ruhr-Kreis (109 WFS features), Kreis Coesfeld (324 ArcGIS features),
+Rhein-Erft-Kreis (166), Kreis Steinfurt (449), and Märkischer Kreis (344).
+The ArcGIS services return GeoJSON with polygon geometry; the app requests
+geographic coordinates and paginates the results. Steinfurt's metadata specifies
+DL-DE-BY-2.0. The other four services do not establish a reuse license in their
+service metadata, so the app links to the provider and labels their terms for
+review. Kreis Borken's service explicitly states that its geodata are protected
+by copyright and is not enabled without permission. WMS-only services and viewer
+pages do not provide a complete machine-readable boundary collection for this
+search.
+
 **Trier, Rheinland-Pfalz** adds 28 live Jagdbezirk polygons via the Geoportal
 RLP OGC API Features collection. The items endpoint supports browser access and
 returns all 28 features with `limit=500`; it nevertheless emits an extra `next`
@@ -194,6 +223,16 @@ link after the complete result. The loader stops when `numberMatched` is
 reached. Feature IDs are in `ID1`; display names use `Kurzname` and `Jagdbezirk`.
 The catalogue metadata specifies DL-DE-BY-2.0 and attribution to Stadt Trier:
 https://www.geoportal.rlp.de/mapbender/php/mod_showMetadata.php?languageCode=de&resource=layer&layout=tabs&id=81585
+
+Three Niedersachsen sources are currently available in the region selector:
+Landkreis Ammerland (128 WFS polygons, DL-DE-Zero-2.0), Landkreis Osterholz
+(129 ArcGIS polygons, DL-DE-BY-2.0), and Region Hannover (418 ArcGIS polygons).
+The Region Hannover service metadata does not state a reuse license; check the
+provider's terms before reusing or redistributing its data. Landkreis Göttingen
+also publishes 428 hunting-district polygons under CC BY 3.0 DE, but its WFS
+does not allow browser CORS from this app and is listed only in
+`Endpunkte_Niedersachsen.csv`, not enabled for search. The CSV records further
+catalogue leads and distinguishes them from directly usable services.
 
 Refresh from the repository root with PowerShell:
 

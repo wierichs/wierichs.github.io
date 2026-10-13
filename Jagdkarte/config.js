@@ -15,6 +15,67 @@ window.JAGDKARTE_CONFIG = {
     licenseUrl: 'https://creativecommons.org/licenses/by/4.0/deed.de',
     metadataUrl: 'https://www.bielefeld01.de/mdOLKD/Daten/jagdreviere_pl?FORMAT=HTML_Daten'
   }, {
+    id: 'ennepe-ruhr-kreis',
+    label: 'Ennepe-Ruhr-Kreis, Nordrhein-Westfalen',
+    type: 'wfs',
+    url: 'https://geodatenportal.en-kreis.de/geoservice1/fachdaten_umwelt/wfs',
+    typeName: 'fachdaten_umwelt:jagdbezirke_erk',
+    outputFormat: 'application/json',
+    nameFields: ['revier_name', 'nummer', 'id'],
+    idFields: ['id'],
+    attribution: 'Ennepe-Ruhr-Kreis',
+    license: 'Nutzungsbedingungen beim Anbieter pruefen',
+    licenseUrl: 'https://geodatenportal.en-kreis.de/geoservice1/fachdaten_umwelt/wfs?service=WFS&request=GetCapabilities',
+    metadataUrl: 'https://geodatenportal.en-kreis.de/geoservice1/fachdaten_umwelt/wfs?service=WFS&request=GetCapabilities'
+  }, {
+    id: 'kreis-coesfeld',
+    label: 'Kreis Coesfeld, Nordrhein-Westfalen',
+    type: 'arcgis',
+    url: 'https://www.kreis-coesfeld.de/arcgis/rest/services/32/Jagdbezirke/MapServer',
+    layerId: 0,
+    pageSize: 500,
+    nameFields: ['name', 'nummer', 'art', 'hegering'],
+    attribution: 'Kreis Coesfeld',
+    license: 'Nutzungsbedingungen beim Anbieter pruefen',
+    licenseUrl: 'https://www.kreis-coesfeld.de/arcgis/rest/services/32/Jagdbezirke/MapServer?f=pjson',
+    metadataUrl: 'https://www.kreis-coesfeld.de/arcgis/rest/services/32/Jagdbezirke/MapServer?f=pjson'
+  }, {
+    id: 'rhein-erft-kreis',
+    label: 'Rhein-Erft-Kreis, Nordrhein-Westfalen',
+    type: 'arcgis',
+    url: 'https://geo.rhein-erft-kreis.de/arcgis/rest/services/WMS/WMS_REK_Jagdbezirkskarte/MapServer',
+    layerId: 5,
+    pageSize: 500,
+    nameFields: ['NAME', 'TSN_NEU', 'TSN_REV_NR', 'lfdNr'],
+    attribution: 'Rhein-Erft-Kreis',
+    license: 'Nutzungsbedingungen beim Anbieter pruefen',
+    licenseUrl: 'https://geo.rhein-erft-kreis.de/arcgis/rest/services/WMS/WMS_REK_Jagdbezirkskarte/MapServer?f=pjson',
+    metadataUrl: 'https://geo.rhein-erft-kreis.de/arcgis/rest/services/WMS/WMS_REK_Jagdbezirkskarte/MapServer?f=pjson'
+  }, {
+    id: 'kreis-steinfurt',
+    label: 'Kreis Steinfurt, Nordrhein-Westfalen',
+    type: 'arcgis',
+    url: 'https://gis.kreis-steinfurt.de/arcgis14/rest/services/OpenData/OpenData_Umwelt/MapServer',
+    layerId: 4,
+    pageSize: 500,
+    nameFields: ['Jagdbezirk', 'Revier_Nr', 'Gemeinde'],
+    attribution: 'Kreis Steinfurt',
+    license: 'DL-DE-BY-2.0',
+    licenseUrl: 'https://www.govdata.de/dl-de/by-2-0',
+    metadataUrl: 'https://gis-kreis-steinfurt.opendata.arcgis.com/datasets/jagdbezirke'
+  }, {
+    id: 'maerkischer-kreis',
+    label: 'Märkischer Kreis, Nordrhein-Westfalen',
+    type: 'arcgis',
+    url: 'https://gdi.maerkischer-kreis.de/arcgis/rest/services/Jagd/Jagdbezirke_Internet/MapServer',
+    layerId: 0,
+    pageSize: 500,
+    nameFields: ['NAME', 'SCHRIFT', 'Jagdbezirk_Nummer'],
+    attribution: 'Märkischer Kreis',
+    license: 'Nutzungsbedingungen beim Anbieter pruefen',
+    licenseUrl: 'https://gdi.maerkischer-kreis.de/arcgis/rest/services/Jagd/Jagdbezirke_Internet/MapServer?f=pjson',
+    metadataUrl: 'https://experience.arcgis.com/experience/c43b6f597bb74b449c3702047b326236'
+  }, {
     id: 'rhein-kreis-neuss',
     label: 'Rhein-Kreis Neuss, Nordrhein-Westfalen (Snapshot)',
     type: 'snapshot',
@@ -76,5 +137,42 @@ window.JAGDKARTE_CONFIG = {
     license: 'DL-DE-BY-2.0',
     licenseUrl: 'https://www.govdata.de/dl-de/by-2-0',
     metadataUrl: 'https://www.geoportal.rlp.de/mapbender/php/mod_showMetadata.php?languageCode=de&resource=layer&layout=tabs&id=81585'
+  }, {
+    id: 'ammerland',
+    label: 'Landkreis Ammerland, Niedersachsen',
+    type: 'wfs',
+    url: 'https://inspire.govconnect.de/ows/services/org.21.a264226f-813c-472f-8ee5-b6bd5b642406_wfs',
+    typeName: 'ft1:Jagdbezirke',
+    outputFormat: 'application/json',
+    nameFields: ['Jagdbezirk', 'Hegering', 'Gemeinde'],
+    idFields: ['gml_id'],
+    attribution: 'Landkreis Ammerland',
+    license: 'DL-DE-Zero-2.0',
+    licenseUrl: 'https://www.govdata.de/dl-de/zero-2-0',
+    metadataUrl: 'https://ni-harvest-prod.geocat.live/catalogue/srv/ger/catalog.search#/metadata/0c7a95e7-9e4a-4a53-b68b-57696fac94a6'
+  }, {
+    id: 'osterholz',
+    label: 'Landkreis Osterholz, Niedersachsen',
+    type: 'arcgis',
+    url: 'https://gis.landkreis-osterholz.de/arcgis/rest/services/www/JagdbezirkeWWW/MapServer',
+    layerId: 0,
+    pageSize: 500,
+    nameFields: ['Name', 'Nummer', 'Bezeichnung', 'Hegering'],
+    attribution: 'Landkreis Osterholz',
+    license: 'DL-DE-BY-2.0',
+    licenseUrl: 'https://www.govdata.de/dl-de/by-2-0',
+    metadataUrl: 'https://ni-harvest-prod.geocat.live/catalogue/srv/ger/catalog.search#/metadata/d505eee1-7e3a-4bf2-859a-2b74f69ede18'
+  }, {
+    id: 'region-hannover',
+    label: 'Region Hannover, Niedersachsen',
+    type: 'arcgis',
+    url: 'https://geoportal.hannit.de/arcgis/rest/services/RH_Internet/Jagdbezirke/MapServer',
+    layerId: 0,
+    pageSize: 500,
+    nameFields: ['REVIERNAME', 'G_TEIL_NAM', 'NR'],
+    attribution: 'Region Hannover',
+    license: 'Nutzungsbedingungen beim Anbieter pruefen',
+    licenseUrl: 'https://www.arcgis.com/home/item.html?id=8f64324d33b64914bd783c4ed8a570c7',
+    metadataUrl: 'https://www.arcgis.com/home/item.html?id=8f64324d33b64914bd783c4ed8a570c7'
   }]
 };

@@ -56,6 +56,7 @@ alter table public.hunting_markers
   check (type_id ~ '^[a-z0-9][a-z0-9_-]{0,39}$');
 
 alter table public.hunting_profiles add column if not exists boundary_geojson jsonb;
+alter table public.hunting_profiles add column if not exists hunting_mode boolean not null default false;
 alter table public.hunting_markers add column if not exists expires_at timestamptz;
 update public.hunting_markers set expires_at = created_at + interval '48 hours'
   where type_id in ('anschuss', 'wildsichtung') and expires_at is null;
@@ -88,6 +89,53 @@ as $$
     select 1 from public.hunting_profiles p
     where p.id = profile_uuid and p.owner_id = (select auth.uid())
   );
+$$;
+
+create or replace function public.hunting_mode_is_enabled(profile_uuid uuid)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select public.can_view_hunting_profile(profile_uuid) and coalesce(
+    (select p.hunting_mode from public.hunting_profiles p where p.id = profile_uuid), false
+  );
+$$;
+
+create or replace function public.require_hunting_mode_for_location()
+returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare enabled boolean;
+begin
+  select p.hunting_mode into enabled from public.hunting_profiles p
+    where p.id = new.profile_id for share;
+  if not coalesce(enabled, false) then
+    raise exception 'Standortfreigabe ist nur im Jagdmodus moeglich';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists hunting_mode_location_guard on public.hunting_profile_locations;
+create trigger hunting_mode_location_guard before insert or update on public.hunting_profile_locations
+  for each row execute function public.require_hunting_mode_for_location();
+
+create or replace function public.set_hunting_mode(p_profile_id uuid, p_enabled boolean)
+returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not public.owns_hunting_profile(p_profile_id) then
+    raise exception 'Nur der Revier-Owner kann den Jagdmodus aendern';
+  end if;
+  update public.hunting_profiles set hunting_mode = p_enabled where id = p_profile_id;
+  if not p_enabled then
+    delete from public.hunting_profile_locations where profile_id = p_profile_id;
+  end if;
+  return p_enabled;
+end;
 $$;
 
 create or replace function public.create_hunting_profile(p_source_id text, p_feature_id text, p_district_name text)
@@ -293,14 +341,18 @@ create policy "Members can delete their own temporary markers" on public.hunting
 drop policy if exists "Owners can view profile locations" on public.hunting_profile_locations;
 drop policy if exists "Profile members can view locations" on public.hunting_profile_locations;
 create policy "Profile members can view locations" on public.hunting_profile_locations
-  for select to authenticated using (public.can_view_hunting_profile(profile_id));
+  for select to authenticated using (public.can_view_hunting_profile(profile_id)
+    and public.hunting_mode_is_enabled(profile_id));
 drop policy if exists "Users can share their own profile location" on public.hunting_profile_locations;
 create policy "Users can share their own profile location" on public.hunting_profile_locations
-  for insert to authenticated with check (user_id = (select auth.uid()) and public.can_view_hunting_profile(profile_id));
+  for insert to authenticated with check (user_id = (select auth.uid())
+    and public.can_view_hunting_profile(profile_id) and public.hunting_mode_is_enabled(profile_id));
 drop policy if exists "Users can update their own profile location" on public.hunting_profile_locations;
 create policy "Users can update their own profile location" on public.hunting_profile_locations
-  for update to authenticated using (user_id = (select auth.uid()) and public.can_view_hunting_profile(profile_id))
-  with check (user_id = (select auth.uid()) and public.can_view_hunting_profile(profile_id));
+  for update to authenticated using (user_id = (select auth.uid())
+    and public.can_view_hunting_profile(profile_id) and public.hunting_mode_is_enabled(profile_id))
+  with check (user_id = (select auth.uid())
+    and public.can_view_hunting_profile(profile_id) and public.hunting_mode_is_enabled(profile_id));
 drop policy if exists "Users can remove their own profile location" on public.hunting_profile_locations;
 create policy "Users can remove their own profile location" on public.hunting_profile_locations
   for delete to authenticated using (user_id = (select auth.uid()));
@@ -314,11 +366,16 @@ grant select, insert, delete on public.hunting_markers to authenticated;
 grant select, insert, update, delete on public.hunting_profile_locations to authenticated;
 revoke all on function public.can_view_hunting_profile(uuid) from public, anon;
 revoke all on function public.owns_hunting_profile(uuid) from public, anon;
+revoke all on function public.hunting_mode_is_enabled(uuid) from public, anon;
+revoke all on function public.require_hunting_mode_for_location() from public, anon, authenticated;
+revoke all on function public.set_hunting_mode(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.create_hunting_profile(text, text, text) from public, anon;
 revoke all on function public.invite_hunting_profile_member(uuid, text) from public, anon;
 revoke all on function public.accept_hunting_profile_invitations() from public, anon;
 grant execute on function public.can_view_hunting_profile(uuid) to authenticated;
 grant execute on function public.owns_hunting_profile(uuid) to authenticated;
+grant execute on function public.hunting_mode_is_enabled(uuid) to authenticated;
+grant execute on function public.set_hunting_mode(uuid, boolean) to authenticated;
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;
 grant execute on function public.invite_hunting_profile_member(uuid, text) to authenticated;
 grant execute on function public.accept_hunting_profile_invitations() to authenticated;

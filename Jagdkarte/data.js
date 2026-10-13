@@ -59,9 +59,25 @@ async function loadOgcApi(source, signal) {
   throw new Error('Der OGC-API-Datensatz ist zu gross. Bitte eine regionale Datenquelle konfigurieren.');
 }
 
+async function loadArcgis(source, signal) {
+  const features = [];
+  const pageSize = source.pageSize || 500;
+  for (let page = 0; page < 40; page += 1) {
+    const url = new URL(`${source.url.replace(/\/$/, '')}/${source.layerId}/query`);
+    Object.entries({ where: '1=1', outFields: '*', outSR: '4326', f: 'geojson',
+      resultOffset: String(page * pageSize), resultRecordCount: String(pageSize)
+    }).forEach(([key, value]) => url.searchParams.set(key, value));
+    const collection = await fetchCollection(url, signal);
+    features.push(...boundaries(collection));
+    if (!collection.exceededTransferLimit && collection.features.length < pageSize) return features;
+  }
+  throw new Error('Der ArcGIS-Datensatz ist zu gross. Bitte eine regionale Datenquelle konfigurieren.');
+}
+
 export async function loadBoundaries(source, signal) {
   if (source.type === 'snapshot') return boundaries(await fetchCollection(source.url, signal));
   if (source.type === 'ogcapi') return loadOgcApi(source, signal);
+  if (source.type === 'arcgis') return loadArcgis(source, signal);
   if (source.type !== 'wfs') throw new Error(`Unbekannter Datendiensttyp: ${source.type}`);
   const features = [];
   for (let page = 0; page < 40; page += 1) {

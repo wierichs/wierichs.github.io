@@ -84,6 +84,24 @@ export async function runDataTests() {
   assert(exactMatchCalls.length === 1, 'OGC API followed a next link after reaching numberMatched.');
   passed.push('OGC API stops when numberMatched is reached');
 
+  const arcgisOffsets = [];
+  await withFetch(async input => {
+    const url = new URL(input);
+    arcgisOffsets.push(url.searchParams.get('resultOffset'));
+    assert(url.searchParams.get('f') === 'geojson', 'ArcGIS did not request GeoJSON.');
+    assert(url.searchParams.get('outSR') === '4326', 'ArcGIS did not request geographic coordinates.');
+    return url.searchParams.get('resultOffset') === '0'
+      ? response([feature('arcgis-1'), feature('arcgis-2')], { exceededTransferLimit: true })
+      : response([feature('arcgis-3')]);
+  }, async () => {
+    const result = await loadBoundaries({
+      type: 'arcgis', url: 'https://arcgis.example/MapServer', layerId: 5, pageSize: 2
+    });
+    assert(result.length === 3, 'ArcGIS pagination did not load all features.');
+  });
+  assert(arcgisOffsets.join(',') === '0,2', 'ArcGIS pagination used unexpected offsets.');
+  passed.push('ArcGIS loads all GeoJSON pages');
+
   await withFetch(async () => response([feature('ogc-1')], { numberReturned: 1, numberMatched: 2 }), async () => {
     let rejected = false;
     try { await loadBoundaries({ type: 'ogcapi', url: 'https://ogc.example/items' }); }
