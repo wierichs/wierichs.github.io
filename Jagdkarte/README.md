@@ -95,11 +95,13 @@ profile. Only the owner can delete it. All members can create temporary
 **Anschuss** and **Wildsichtung** markers while their current browser-reported
 location is inside the district. Members can delete their own temporary markers;
 owners and Bearbeiter can delete any marker.
-Each signed-in user can optionally set an **Anzeigename** for shared-revier
-participants. Only members of a shared profile can retrieve the participant
-names for that profile; blank names fall back to a shortened account ID. Owner
-and Bearbeiter locations use distinct crown and shield icons on the map. Rerun
-`schema.sql` to create the private account-name table and participant lookup RPC.
+Each signed-in user can click their email address in the header to set an
+optional **Anzeigename** for shared-revier participants. Only members of a
+shared profile can retrieve participant names and its owner's email; blank names
+fall back to a shortened account ID. Shared saved revier entries show the owner
+email after `@`. Owner and Bearbeiter locations use distinct crown and shield
+icons on the map. Rerun `schema.sql` to create the private account-name table
+and authorized lookup RPCs.
 
 When an invitee selects a shared profile while Jagdmodus is active, the app asks
 for explicit location consent before requesting browser geolocation. Declining,

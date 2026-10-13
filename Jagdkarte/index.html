@@ -21,7 +21,7 @@
   <header class="topbar">
     <a class="brand" href="./"><i data-lucide="map" aria-hidden="true"></i><span>Jagdkarte</span></a>
     <span class="network" id="network">Online</span>
-    <div class="account"><span id="user-label">Nicht angemeldet</span><button id="account-button"><i data-lucide="log-in" aria-hidden="true"></i><span>Anmelden</span></button></div>
+    <div class="account"><button id="user-label" type="button" title="Anzeigenamen bearbeiten" aria-label="Anzeigenamen bearbeiten" hidden></button><button id="account-button"><i data-lucide="log-in" aria-hidden="true"></i><span>Anmelden</span></button></div>
   </header>
   <main id="app-layout">
     <aside id="search-panel" aria-label="Reviersuche">
@@ -57,11 +57,6 @@
           <p id="profile-status" role="status" aria-live="polite">Lade Profile ...</p>
           <label for="profile-list">Profil fuer dieses Revier</label>
           <select id="profile-list" aria-label="Profil fuer dieses Revier"></select>
-          <form id="display-name-form" hidden>
-            <label for="display-name">Anzeigename fuer Reviermitglieder</label>
-            <div class="display-name-row"><input id="display-name" maxlength="60" autocomplete="nickname" placeholder="Optional"><button class="icon-button" type="submit" title="Anzeigenamen speichern" aria-label="Anzeigenamen speichern"><i data-lucide="save" aria-hidden="true"></i></button></div>
-            <p id="display-name-status" role="status" aria-live="polite" hidden></p>
-          </form>
           <label id="hunting-mode-control" class="toggle" hidden><input id="hunting-mode" type="checkbox"> Jagdmodus</label>
           <p id="owner-location-notice" hidden>Im Jagdmodus wird auch dein Standort mit den Reviermitgliedern geteilt.</p>
           <p id="presence-status" role="status" aria-live="polite" hidden></p>
@@ -109,6 +104,14 @@
     <div class="dialog-heading"><h2 id="location-consent-title">Standortfreigabe</h2></div>
     <p>Wenn du dieses geteilte Revier auswaehlst und der Owner den Jagdmodus aktiviert hat, wird dein Standort nur innerhalb der Reviergrenze an die Mitglieder dieses Revierprofils uebermittelt. Sie sehen deine aktuelle Position. Die Uebermittlung erfolgt alle 30 Sekunden. Beim Ausschalten des Jagdmodus, Verlassen der Grenze oder Abwaehlen wird der gespeicherte Standort geloescht. Ohne Zustimmung nutzt du die Jagdkarte wie ein Gast.</p>
     <div class="profile-actions"><button id="decline-location" type="button">Als Gast ansehen</button><button id="accept-location" class="primary" type="button">Zustimmen und fortfahren</button></div>
+  </dialog>
+  <dialog id="display-name-dialog" aria-labelledby="display-name-title">
+    <div class="dialog-heading"><h2 id="display-name-title">Anzeigename</h2><button id="close-display-name" class="icon-button" type="button" aria-label="Schliessen" title="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <form id="display-name-form">
+      <label for="display-name">Anzeigename fuer Reviermitglieder</label>
+      <div class="display-name-row"><input id="display-name" maxlength="60" autocomplete="nickname" placeholder="Optional"><button class="icon-button" type="submit" title="Anzeigenamen speichern" aria-label="Anzeigenamen speichern"><i data-lucide="save" aria-hidden="true"></i></button></div>
+      <p id="display-name-status" role="status" aria-live="polite" hidden></p>
+    </form>
   </dialog>
   <noscript>Diese Kartenanwendung benoetigt JavaScript.</noscript>
 </body>

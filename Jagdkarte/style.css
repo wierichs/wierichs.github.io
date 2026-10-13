@@ -20,7 +20,8 @@ a { color: var(--green); }
 .network::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #34895b; }
 .network.offline::before { background: #d39d25; }
 .account { margin-left: auto; display: flex; gap: 14px; align-items: center; min-width: 0; }
-#user-label { font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#user-label { font-size: 13px; max-width: 200px; min-width: 0; min-height: 36px; padding: 6px 0; border: 0; background: transparent; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start; }
+#user-label:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--green); text-decoration: underline; }
 main { display: grid; grid-template-columns: 350px minmax(0, 1fr); height: calc(100dvh - 70px); }
 aside { display: flex; flex-direction: column; min-height: 0; padding: 24px; overflow-y: auto; border-right: 1px solid var(--line); background: linear-gradient(180deg, #fff 0%, #f7faf8 100%); }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0; }
@@ -124,8 +125,8 @@ dialog::backdrop { background: #152a2260; }
 @media (max-width: 420px) { #location-consent-dialog .profile-actions { flex-direction: column-reverse; } }
 @media (max-width: 700px) {
   .topbar { height: 60px; padding: 0 14px; gap: 10px; }
-  .brand { font-size: 21px; } #user-label { display: none; } .network { margin-left: auto; } .account { margin-left: 0; }
-  #account-button { padding: 9px; font-size: 12px; }
+  .brand { font-size: 21px; } #user-label { display: block; flex: 0 1 96px; max-width: 96px; font-size: 10px; padding: 0; } .network { display: none; } .account { margin-left: auto; gap: 6px; }
+  #account-button { width: 42px; flex: 0 0 42px; padding: 9px; font-size: 12px; } #account-button span { display: none; }
   main { height: calc(100dvh - 60px); grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }
   main.search-collapsed { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 68px; }
   main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }

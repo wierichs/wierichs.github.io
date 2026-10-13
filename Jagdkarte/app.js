@@ -133,10 +133,11 @@ function renderSavedProfiles() {
     button.dataset.profileId = profile.id;
     button.disabled = savedProfilePending;
     const name = document.createElement('strong');
-    name.textContent = profile.district_name;
+    name.textContent = profile.owner_id === user?.id ? profile.district_name
+      : `${profile.district_name} @${profile.owner_email || profile.owner_id.slice(0, 8)}`;
     const detail = document.createElement('small');
     detail.textContent = [source?.label || profile.source_id, profile.owner_id === user?.id
-      ? 'Owner' : `${profile.member_role === 'editor' ? 'Bearbeiter' : 'Gast'} (${profile.owner_id.slice(0, 8)})`].join(' / ');
+      ? 'Eigen' : profile.member_role === 'editor' ? 'Bearbeiter' : 'Gast'].join(' / ');
     button.append(name, detail);
     button.addEventListener('click', () => void openSavedProfile(profile));
     item.append(button);
@@ -167,12 +168,28 @@ async function loadSavedProfiles() {
     if (revision !== savedProfilesRevision || user?.id !== userId) return;
     if (membershipError) throw new Error(membershipError.message);
     const memberRoles = new Map((memberships || []).map(member => [member.profile_id, member.role]));
+    const sharedProfileIds = (data || []).filter(profile => profile.owner_id !== userId).map(profile => profile.id);
+    let ownerEmails = [];
+    let ownerEmailError = null;
+    if (sharedProfileIds.length) {
+      const { data: emails, error: emailError } = await supabaseClient.rpc('get_hunting_profile_owner_emails', {
+        p_profile_ids: sharedProfileIds
+      });
+      if (revision !== savedProfilesRevision || user?.id !== userId) return;
+      if (emailError) ownerEmailError = emailError;
+      else ownerEmails = emails || [];
+    }
+    const ownerEmailByProfileId = new Map(ownerEmails.map(owner => [owner.profile_id, owner.owner_email]));
     savedProfiles = (data || []).map(profile => ({ ...profile,
+      owner_email: ownerEmailByProfileId.get(profile.id) || null,
       member_role: profile.owner_id === userId ? 'owner' : memberRoles.get(profile.id) || 'guest'
-    }));
+    })).sort((left, right) => Number(right.owner_id === userId) - Number(left.owner_id === userId) ||
+      left.district_name.localeCompare(right.district_name, 'de'));
     renderSavedProfiles();
-    element('saved-status').textContent = savedProfiles.length
-      ? `${savedProfiles.length} gespeicherte(s) Revierprofil(e).` : 'Noch keine eigenen oder freigegebenen Reviere.';
+    element('saved-status').textContent = ownerEmailError
+      ? `Reviere geladen, Owner-E-Mails noch nicht verfuegbar. Datenbankschema aktualisieren. (${ownerEmailError.message})`
+      : savedProfiles.length
+        ? `${savedProfiles.length} gespeicherte(s) Revierprofil(e).` : 'Noch keine eigenen oder freigegebenen Reviere.';
   } catch (error) {
     if (revision === savedProfilesRevision && user?.id === userId) {
       element('saved-status').textContent = `Gespeicherte Reviere konnten nicht geladen werden: ${error.message}`;
@@ -285,7 +302,6 @@ function updateProfileControls() {
   element('invite-toggle').hidden = !canEdit;
   element('hunting-mode-control').hidden = !canEdit;
   element('owner-location-notice').hidden = !canEdit;
-  element('display-name-form').hidden = !Boolean(user && activeProfile);
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
   element('hunting-mode').disabled = huntingModePending;
   const availableTypes = markerTypes.filter(type => canEdit || type.temporary);
@@ -662,7 +678,6 @@ async function activateProfile(profile) {
     activeProfile = profile;
     element('profile-list').value = profile.id;
     updateProfileControls();
-    void loadOwnDisplayName();
     await registerProfileBoundary(profile);
     if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
     await loadProfileMarkers();
@@ -678,7 +693,6 @@ async function activateProfile(profile) {
   activeProfile = profile;
   element('profile-list').value = profile.id;
   updateProfileControls();
-  void loadOwnDisplayName();
   await registerProfileBoundary(profile);
   if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
   await loadProfileMarkers();
@@ -758,7 +772,6 @@ async function loadProfiles(preferredId) {
     : profiles.find(profile => profile.owner_id === user.id) || null;
   if (activeProfile) {
     profileSelect.value = activeProfile.id;
-    void loadOwnDisplayName();
   }
   profileSelect.hidden = profiles.length === 0;
   profileStatus(profiles.length ? `${profiles.length} unabhaengige(s) Revierprofil(e).` : 'Noch kein Profil fuer dieses Revier.');
@@ -797,7 +810,6 @@ function clearSelection() {
   resetMarkerPlacement();
   element('profile-list').replaceChildren();
   element('profile-list').hidden = true;
-  element('display-name-form').hidden = true;
   element('hunting-mode-control').hidden = true;
   element('presence-status').hidden = true;
   element('invite-form').hidden = true;
@@ -1111,7 +1123,7 @@ element('profile-list').addEventListener('change', async event => {
 });
 element('display-name-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!user || !supabaseClient || !activeProfile) return;
+  if (!user || !supabaseClient) return;
   const userId = user.id;
   const displayName = element('display-name').value.trim();
   const button = element('display-name-form').querySelector('button[type="submit"]');
@@ -1363,7 +1375,10 @@ async function applySession(session) {
   element('search-fields').disabled = false;
   element('auth-notice').hidden = Boolean(user);
   element('auth-notice').textContent = 'Reviergrenzen sind frei zugaenglich. Melde dich an, um Revierprofile und Markierungen zu sehen.';
-  element('user-label').textContent = user?.email || 'Nicht angemeldet';
+  element('user-label').textContent = user?.email || '';
+  element('user-label').hidden = !user;
+  if (user && previousId !== user.id) void loadOwnDisplayName();
+  else if (element('display-name-dialog').open) element('display-name-dialog').close();
   element('account-button').querySelector('span').textContent = user ? 'Abmelden' : 'Anmelden';
   if (!user) {
     savedProfilesRevision += 1;
@@ -1401,6 +1416,15 @@ async function applySession(session) {
   }
 }
 
+element('user-label').addEventListener('click', async () => {
+  if (!user) return;
+  element('display-name-status').hidden = true;
+  await loadOwnDisplayName();
+  if (!user) return;
+  element('display-name-dialog').showModal();
+  element('display-name').focus();
+});
+element('close-display-name').addEventListener('click', () => element('display-name-dialog').close());
 element('account-button').addEventListener('click', async () => {
   if (user) {
     profileActivationRevision += 1;

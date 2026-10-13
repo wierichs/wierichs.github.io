@@ -136,6 +136,19 @@ begin
 end;
 $$;
 
+create or replace function public.get_hunting_profile_owner_emails(p_profile_ids uuid[])
+returns table(profile_id uuid, owner_email text)
+language sql stable security definer
+set search_path = ''
+as $$
+  select p.id, u.email
+  from public.hunting_profiles p
+  join auth.users u on u.id = p.owner_id
+  where (select auth.uid()) is not null
+    and p.id = any(coalesce(p_profile_ids, array[]::uuid[]))
+    and public.can_view_hunting_profile(p.id);
+$$;
+
 create or replace function public.hunting_mode_is_enabled(profile_uuid uuid)
 returns boolean
 language sql stable security definer
@@ -431,6 +444,7 @@ revoke all on function public.can_view_hunting_profile(uuid) from public, anon;
 revoke all on function public.owns_hunting_profile(uuid) from public, anon;
 revoke all on function public.can_edit_hunting_profile(uuid) from public, anon;
 revoke all on function public.get_hunting_profile_participants(uuid) from public, anon;
+revoke all on function public.get_hunting_profile_owner_emails(uuid[]) from public, anon;
 revoke all on function public.hunting_mode_is_enabled(uuid) from public, anon;
 revoke all on function public.require_hunting_mode_for_location() from public, anon, authenticated;
 revoke all on function public.set_hunting_mode(uuid, boolean) from public, anon, authenticated;
@@ -441,6 +455,7 @@ grant execute on function public.can_view_hunting_profile(uuid) to authenticated
 grant execute on function public.owns_hunting_profile(uuid) to authenticated;
 grant execute on function public.can_edit_hunting_profile(uuid) to authenticated;
 grant execute on function public.get_hunting_profile_participants(uuid) to authenticated;
+grant execute on function public.get_hunting_profile_owner_emails(uuid[]) to authenticated;
 grant execute on function public.hunting_mode_is_enabled(uuid) to authenticated;
 grant execute on function public.set_hunting_mode(uuid, boolean) to authenticated;
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;
