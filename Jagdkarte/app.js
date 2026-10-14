@@ -476,11 +476,12 @@ function updateProfileControls() {
   element('owner-location-notice').hidden = !canEdit;
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
   element('hunting-mode').disabled = huntingModePending;
-  const availableTypes = markerTypes.filter(type => canEdit || type.temporary);
+  const availableTypes = markerTypes.filter(type => canEdit || (type.temporary && !type.editorsOnly));
   element('add-marker').hidden = !user || !activeProfile || availableTypes.length === 0;
   const select = element('marker-type');
   Array.from(select.options).forEach(option => {
-    option.disabled = !canEdit && !markerTypesById.get(option.value)?.temporary;
+    const type = markerTypesById.get(option.value);
+    option.disabled = !canEdit && (!type?.temporary || type.editorsOnly);
     option.hidden = option.disabled;
   });
   Array.from(select.querySelectorAll('optgroup')).forEach(group => {
@@ -1543,7 +1544,7 @@ element('marker-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!supabaseClient || !markerCoordinates || !activeProfile || !user || markerPending) return;
   const type = markerTypesById.get(element('marker-type').value);
-  if (!type || (!type.temporary && !canEditProfile())) return;
+  if (!type || ((!type.temporary || type.editorsOnly) && !canEditProfile())) return;
   const profileId = activeProfile.id;
   const userId = user.id;
   const feature = selected;

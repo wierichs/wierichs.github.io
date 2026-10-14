@@ -275,6 +275,9 @@ begin
   if p_type_id is null or p_type_id not in ('anschuss', 'wildsichtung', 'standplatz') then
     raise exception 'Ungueltige temporaere Meldungsart';
   end if;
+  if p_type_id = 'standplatz' and not public.can_edit_hunting_profile(p_profile_id) then
+    raise exception 'Nur Owner und Bearbeiter duerfen Standplaetze setzen';
+  end if;
   if p_latitude is null or p_longitude is null
     or not (p_latitude between -90 and 90 and p_longitude between -180 and 180) then
     raise exception 'Ungueltige Koordinaten';

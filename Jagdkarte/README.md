@@ -94,7 +94,8 @@ the Jagdmodus, and permanent markers like the owner, but cannot delete the
 profile. Only the owner can delete it. All members can create temporary
 **Anschuss** and **Wildsichtung** markers while their current browser-reported
 location is inside the district. **Standplatz** markers can be planned without
-current-location verification, but their target must remain inside the district.
+current-location verification by the owner or a Bearbeiter; their target must
+remain inside the district. All profile members can see Standplatz markers.
 Members can delete their own temporary markers;
 owners and Bearbeiter can delete any marker.
 Each signed-in user can click their email address in the header to set an

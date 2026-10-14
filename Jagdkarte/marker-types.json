@@ -112,6 +112,7 @@
       "id": "standplatz",
       "label": "Standplatz",
       "temporary": true,
+      "editorsOnly": true,
       "requiresCurrentLocation": false,
       "iconUrl": "./markers/standplatz.svg",
       "iconSize": [40, 48],
