@@ -76,9 +76,28 @@ export function createJwdExport(name, geometry, markers = [], markerTypes = [], 
     throw new Error('Die Reviergrenze ist kein Polygon.');
   }
   const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  let minLatitude = Infinity;
+  let maxLatitude = -Infinity;
+  let minLongitude = Infinity;
+  let maxLongitude = -Infinity;
+  for (const polygon of polygons) {
+    for (const [longitude, latitude] of polygon[0]) {
+      minLatitude = Math.min(minLatitude, latitude);
+      maxLatitude = Math.max(maxLatitude, latitude);
+      minLongitude = Math.min(minLongitude, longitude);
+      maxLongitude = Math.max(maxLongitude, longitude);
+    }
+  }
+  const lat = (minLatitude + maxLatitude) / 2;
+  const lng = (minLongitude + maxLongitude) / 2;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Die Reviergrenze enthaelt keine gueltigen Koordinaten.');
+  }
   const convertRing = ring => ring.map(([longitude, latitude]) => ({ latitude, longitude }));
   const typesById = new Map(markerTypes.map(type => [type.id, type]));
   return {
+    lat,
+    lng,
     title: name,
     huntingGround: {
       borders: polygons.map(polygon => convertRing(polygon[0])),

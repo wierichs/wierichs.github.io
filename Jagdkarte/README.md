@@ -121,6 +121,10 @@ persistent markers from the active profile, including types, titles, coordinates
 and notes. Temporary markers are never exported. Marker loading failures prevent
 an incomplete download; switching profiles or signing out cancels a pending export.
 Source attribution and license information are retained in the file.
+The JWD root uses `title` for the revier name and `lat`/`lng` for a reference
+point at the center of the bounding box of all outer boundary rings. This point
+is not guaranteed to lie inside irregular or disconnected reviers. Boundary
+points and facility coordinates explicitly use `latitude` and `longitude`.
 
 When an invitee selects a shared profile while Jagdmodus is active, the app asks
 for explicit location consent before requesting browser geolocation. Declining,

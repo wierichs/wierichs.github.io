@@ -68,6 +68,11 @@ export async function runDataTests() {
   passed.push('JWD boundary-only export excludes all markers and preserves polygon holes');
 
   const fullExport = createJwdExport(imported.name, imported.geometry, exportMarkers, exportTypes, true);
+  assert(fullExport.title === imported.name && fullExport.lat === 1 && fullExport.lng === 1 &&
+    JSON.stringify(fullExport.huntingGround.borders[0][1]) === JSON.stringify({ latitude: 0, longitude: 2 }) &&
+    JSON.stringify(fullExport.huntingGround.facilities[0].coordinate) === JSON.stringify({ latitude: 1.5, longitude: 1.5 }),
+    'JWD export did not match title, named coordinates, and root reference point of the sample format.');
+  passed.push('JWD export uses title, explicit latitude/longitude and root lat/lng');
   const roundTrip = parseJwdImport(JSON.stringify(fullExport));
   assert(roundTrip.facilities.length === 2 && roundTrip.facilities[0].type === 'Bock' &&
     roundTrip.facilities[1].type === 'unknown' && fullExport.huntingGround.facilities[0].notes === 'Am Waldrand',
@@ -76,9 +81,19 @@ export async function runDataTests() {
 
   const multiGeometry = { type: 'MultiPolygon', coordinates: [imported.geometry.coordinates,
     [[[3, 3], [4, 3], [4, 4], [3, 3]]]] };
-  assert(JSON.stringify(parseJwdImport(createJwdExport('Multi', multiGeometry)).geometry) === JSON.stringify(multiGeometry),
+  const multiExport = createJwdExport('Multi', multiGeometry);
+  assert(JSON.stringify(parseJwdImport(multiExport).geometry) === JSON.stringify(multiGeometry),
     'JWD export did not preserve all MultiPolygon components and holes.');
   passed.push('JWD export preserves MultiPolygon boundaries');
+
+  assert(multiExport.lat === 2 && multiExport.lng === 2,
+    'JWD reference point did not include all MultiPolygon components.');
+  const asymmetricExport = createJwdExport('Asymmetric', { type: 'Polygon', coordinates: [
+    [[-8, 48], [-2, 48], [-2, 50], [-8, 48]]
+  ] });
+  assert(asymmetricExport.lat === 49 && asymmetricExport.lng === -5,
+    'JWD reference point swapped latitude/longitude or used a vertex average instead of the bounds center.');
+  passed.push('JWD reference point uses the bounds center of all boundary components');
 
   const mappedFacilities = mapJwdFacilities([
     { latitude: 1, longitude: 1, type: 'Bock', title: '' },
