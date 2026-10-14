@@ -1774,7 +1774,11 @@ if ('serviceWorker' in navigator) {
       if (navigator.onLine && !document.hidden) void registration.update().catch(() => {});
     };
     window.addEventListener('online', checkForUpdate);
+    window.addEventListener('focus', checkForUpdate);
+    window.addEventListener('pageshow', checkForUpdate);
     document.addEventListener('visibilitychange', checkForUpdate);
+    void checkForUpdate();
+    setInterval(checkForUpdate, 30 * 60 * 1000);
   }).catch(() => { showMapStatus('Offline-App konnte nicht eingerichtet werden.', 'error'); });
 }
 
