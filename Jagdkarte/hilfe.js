@@ -1,0 +1,1 @@
+window.lucide?.createIcons();

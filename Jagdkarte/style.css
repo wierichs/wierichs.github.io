@@ -99,6 +99,9 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #map { width: 100%; height: 100%; }
 .map-toolbar { position: absolute; right: 16px; top: 16px; z-index: 500; display: flex; gap: 8px; }
 .map-toolbar button { box-shadow: 0 2px 8px #20342826; }
+.help-link { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 5px; background: white; text-decoration: none; box-shadow: 0 2px 8px #20342826; }
+.help-link:hover { background: #edf3ef; border-color: #a4b9ac; }
+.help-link svg { width: 20px; height: 20px; }
 .map-key { position: absolute; left: 16px; bottom: 28px; z-index: 500; max-width: calc(100% - 32px); padding: 8px 12px; background: #fffffff0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; pointer-events: none; }
 .boundary-swatch { width: 22px; height: 12px; border: 2px solid var(--accent); background: #c43b5520; }
 .profile-location-marker.leaflet-div-icon { border: 0; background: transparent; }
@@ -143,3 +146,43 @@ dialog::backdrop { background: #152a2260; }
   .map-key { bottom: 35px; font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
 }
 @media (prefers-reduced-motion: no-preference) { aside { animation: reveal .35s ease-out; } @keyframes reveal { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } } }
+
+.help-page .topbar { height: auto; min-height: 70px; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
+.help-back { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; text-decoration: none; font-weight: 700; }
+.help-main { display: block; height: auto; max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+.help-main h1 { font-size: 30px; margin: 0 0 16px; }
+.help-main p, .help-main li, .help-main dd { line-height: 1.7; overflow-wrap: anywhere; }
+.help-intro { max-width: 720px; }
+.help-warning { border-left: 4px solid var(--accent); padding: 8px 16px; background: #fff; }
+.help-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 32px; margin-top: 28px; }
+.help-nav { position: sticky; top: 24px; align-self: start; border-right: 1px solid var(--line); padding-right: 20px; }
+.help-nav h2 { margin: 0 0 12px; font-size: 16px; }
+.help-nav a { display: flex; align-items: center; min-height: 44px; padding: 8px 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.help-content { min-width: 0; }
+.help-content section { padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); scroll-margin-top: 20px; }
+.help-content h2 { font-size: 23px; margin: 0 0 16px; }
+.help-content h3 { font-size: 18px; margin: 24px 0 8px; }
+.help-content ol, .help-content ul { padding-left: 24px; }
+.help-content li { padding-left: 4px; margin-bottom: 10px; }
+.help-tools { display: block; font-size: 16px; margin: 0; }
+.help-tools > div { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.help-tools dt { display: flex; align-items: center; gap: 12px; color: var(--ink); font-weight: 700; }
+.help-tools dt svg { width: 24px; height: 24px; flex: 0 0 24px; color: var(--green); }
+.help-tools dd { margin: 8px 0 0 36px; }
+.help-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-top: 12px; }
+.help-footer a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 700px) {
+  .help-main { padding: 24px 18px; }
+  .help-main h1 { font-size: 26px; }
+  .help-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .help-nav { position: static; padding: 0 0 20px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .help-content h2 { font-size: 21px; }
+}
+@media print {
+  .help-page { background: white; }
+  .help-page .topbar, .help-nav, .help-footer { display: none; }
+  .help-main { max-width: none; padding: 0; }
+  .help-layout { display: block; }
+  .help-content h2, .help-content h3 { break-after: avoid; }
+  .help-tools > div, .help-content li { break-inside: avoid; }
+}

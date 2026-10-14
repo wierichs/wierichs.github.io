@@ -4,6 +4,10 @@ A static, installable PWA for regional German hunting-district boundaries on
 OpenStreetMap. Open `https://wierichs.github.io/Jagdkarte/` after deployment.
 The repository home page links to the app. No build step is required.
 
+German step-by-step user help is available in `hilfe.html`, linked from the
+question-mark icon on the map. It opens in a separate tab so current input is
+not discarded. The help, its icons, and its styles are part of the offline shell.
+
 ## Authentication Setup
 
 1. Create a Supabase project and enable the Email authentication provider.
