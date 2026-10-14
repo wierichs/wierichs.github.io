@@ -1,5 +1,4 @@
 import { boundaries, loadBoundaries, featureName } from './data.js';
-import { mapJwdFacilities, parseJwdImport } from './jwd-import.js';
 
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
@@ -258,6 +257,7 @@ async function importJwdProfile(file) {
   element('saved-status').textContent = 'Revierdatei wird geprueft ...';
   try {
     if (file.size > 10 * 1024 * 1024) throw new Error('Die Datei ist groesser als 10 MB.');
+    const { mapJwdFacilities, parseJwdImport } = await import('./jwd-import.js');
     const imported = parseJwdImport(await file.text());
     if (imported.name.length > 200) throw new Error('Der Reviername ist laenger als 200 Zeichen.');
     if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');

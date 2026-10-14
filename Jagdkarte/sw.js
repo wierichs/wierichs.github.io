@@ -1,6 +1,6 @@
-const CACHE = 'jagdkarte-shell-v48';
+const CACHE = 'jagdkarte-shell-v50';
 const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './config.js',
-  './lucide.js', './supabase.js', './jwd-import.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
+  './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
   './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/leiter.svg',
   './markers/kanzel.svg', './markers/drueckjagdbock.svg', './markers/kirrung.svg', './markers/sonstiges.svg',
   './markers/falle.svg', './markers/wildkamera.svg',
@@ -9,14 +9,18 @@ const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './
   './vendor/leaflet/images/layers.png', './vendor/leaflet/images/layers-2x.png',
   './vendor/leaflet/images/marker-icon.png', './vendor/leaflet/images/marker-icon-2x.png',
   './vendor/leaflet/images/marker-shadow.png', './vendor/leaflet/LICENSE'];
-const shellUrls = new Set(SHELL.map(path => new URL(path, self.location).href));
+const OPTIONAL_SHELL = ['./jwd-import.js'];
+const shellUrls = new Set([...SHELL, ...OPTIONAL_SHELL].map(path => new URL(path, self.location).href));
 const markerCatalogUrl = new URL('./marker-types.json', self.location);
 const markerBaseUrl = new URL('./markers/', self.location);
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE)
-    .then(cache => cache.addAll(SHELL.map(path => new Request(new URL(path, self.location), { cache: 'reload' }))))
-    .then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(async cache => {
+    await cache.addAll(SHELL.map(path => new Request(new URL(path, self.location), { cache: 'reload' })));
+    await Promise.all(OPTIONAL_SHELL.map(path => cache.add(
+      new Request(new URL(path, self.location), { cache: 'reload' })
+    ).catch(() => {})));
+  }).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('jagdkarte-shell-') && key !== CACHE)
