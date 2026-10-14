@@ -4,9 +4,11 @@ A static, installable PWA for regional German hunting-district boundaries on
 OpenStreetMap. Open `https://wierichs.github.io/Jagdkarte/` after deployment.
 The repository home page links to the app. No build step is required.
 
-German step-by-step user help is available in `hilfe.html`, linked from the
+German step-by-step [user help](hilfe.html) is linked from the
 question-mark icon on the map. It opens in a separate tab so current input is
-not discarded. The help, its icons, and its styles are part of the offline shell.
+not discarded. It explains smartphone workflows and symbols without requiring
+knowledge of JSON or data services. The help, its icons, and its styles are part
+of the offline shell. This README documents technical setup and maintenance.
 
 ## Authentication Setup
 
@@ -79,13 +81,16 @@ security policies in `schema.sql`.
 
 ## Owner Profiles And Markers
 
-Run `schema.sql` once in the Supabase Dashboard SQL Editor for this project.
-It creates the profile, member, invitation, and marker tables, their RLS
-policies, and the RPC functions used by the app. It is additive and can be run
-again safely. Rerun it after updating the app so the location table, temporary
-markers, expiry job, and their RLS policies are installed. Enable PostGIS in the
+Run `schema.sql` in the Supabase Dashboard SQL Editor for this project.
+It creates the profile, member, invitation, marker, location, display-name,
+and marker-rule tables, their RLS policies, and the RPC functions used by the
+app. It can be run again to install updated functions and policies. Apply
+schema changes before deploying an app version that depends on them. Enable PostGIS in the
 `extensions` schema and pg_cron in Supabase before running it if they are not
-already available. Do not disable RLS or grant access to the `anon` role.
+already available. Do not disable RLS or grant the `anon` role access to private
+profile, member, invitation, marker, location, or display-name tables. Anonymous
+read access to the non-sensitive `hunting_temporary_marker_types` table is
+intentional; app users cannot write these rules.
 
 After signing in, select a district and choose **Als Owner fuehren** to create
 your profile. A district can have separate profiles for different owners; each
@@ -110,7 +115,10 @@ email after `@`. Owner and Bearbeiter locations use distinct crown and shield
 icons on the map. Rerun `schema.sql` to create the private account-name table
 and authorized lookup RPCs.
 
-Signed-in users can import `.jwd` JSON files from the **Auswahl** tab. The import
+Signed-in users can import `.jwd` files using **JWD importieren** in the header
+(an upload icon on small screens). The file picker also accepts `.json` files
+containing the same JWD structure, not arbitrary JSON documents. Files must be
+at most 10 MB. The import
 stores the boundary and permanent facilities as a private owner profile; invited
 members can access it through the normal profile-sharing controls. Pacified areas
 become polygon holes. Facilities outside the boundary are preserved after a
@@ -123,8 +131,12 @@ The import writes through `import_hunting_profile` as one database transaction:
 invalid facilities roll back the profile, boundary, and all facilities together.
 Existing profiles are locked during the import; permissions, duplicates, and
 the current stored boundary are checked again on the server. Updating an existing
-profile never changes its boundary. Apply the updated `schema.sql` before
-deploying this app version; there is deliberately no non-transactional fallback.
+profile never changes its boundary. The client previews additions for exactly
+one same-name owner/editor profile; ambiguous matches are rejected. Duplicates
+are skipped. New facilities outside an existing profile's boundary are not
+added, while a new profile can retain outside facilities after confirmation.
+The database must provide this RPC; there is deliberately no non-transactional
+fallback. See **Verification** for the confirmed deployment status.
 
 The download button exports the selected revier as `<Reviername>.jwd`, including
 all boundary components and polygon holes as pacified areas. Guests and signed-out
@@ -132,7 +144,10 @@ users receive boundaries only. Owners and Bearbeiter additionally receive all
 persistent markers from the active profile, including types, titles, coordinates,
 and notes. Temporary markers are never exported. Marker loading failures prevent
 an incomplete download; switching profiles or signing out cancels a pending export.
-Source attribution and license information are retained in the file.
+For configured public sources, source attribution and license information are
+included in the file. Importing a JWD file does not store its original source
+or license metadata; a later export of that private import does not reproduce
+those fields.
 Downloads use compact JSON without formatting whitespace; text values are unchanged.
 The JWD root uses `title` for the revier name and `lat`/`lng` for a reference
 point at the center of the bounding box of all outer boundary rings. This point
@@ -181,7 +196,9 @@ Temporary marker rules are defined once in `hunting_temporary_marker_types`:
 rule table is publicly readable but cannot be written by app users. The UI loads
 these rules; expiry triggers, marker RPCs, and RLS use the same source. Do not
 add temporary/GPS/role flags to the icon catalog. Add the rule in `schema.sql`
-and apply it in Supabase when adding a temporary type. For existing
+and apply it in Supabase when adding a temporary type. The initial seed uses
+`ON CONFLICT DO NOTHING`: changing an existing seeded rule requires an explicit
+SQL update, not merely rerunning the seed. For existing
 profiles, the owner must open the district/profile once after the schema update
 to register its boundary. Until then, temporary creation fails
 closed with an explanatory error. `delete-expired-hunting-markers` is the named
@@ -215,12 +232,12 @@ region cancels an in-flight request for the previous one. Bielefeld,
 Nordrhein-Westfalen, is one available source; its live WFS returned 63 polygon
 features during browser verification. Search matches names, numbers, and scalar
 attributes, including EJB/GJB codes. Selecting a result highlights and fits its
-polygon; the boundary can be toggled or exported as GeoJSON with source and
-license information.
+polygon; the boundary can be toggled or exported as a JWD file. The download
+rules for public-source metadata and profile markers are described above.
 
 The panel has **Suche** and **Auswahl** tabs. Suche retains the region/search
 workflow; Auswahl lists the authenticated user's own and invited profiles across
-all configured regions, with region and Eigen/Geteilt labels. Supabase RLS filters
+all configured regions, with region and Eigen/Gast/Bearbeiter labels. Supabase RLS filters
 this list; no additional database migration or separate favorites storage is used.
 Clicking an entry loads its region and selects the district by stable ID. The
 chosen profile is respected even when multiple owners have profiles for the same
@@ -325,13 +342,16 @@ To add a region, append a source to the `sources` array in `config.js`, specifyi
 are stored in source-specific properties instead of GeoJSON `id` fields. Use
 `type: 'wfs'` with `typeName` and
 `outputFormat` for WFS 2.0, `type: 'ogcapi'` for an OGC API Features items URL,
+`type: 'arcgis'` with `layerId` and optional `pageSize` for an ArcGIS layer query,
 or `type: 'snapshot'` for a complete static GeoJSON FeatureCollection. OGC API
 pagination follows same-origin `next` links and rejects a final page whose
 `numberMatched` exceeds the received feature count. Verify browser CORS, the
 license, exact property names, stable feature IDs, polygon geometry, and
-longitude/latitude coordinates before enabling a source. WFS and OGC API
-requests have a 20,000-feature safety limit; all source loads have a 30-second
-timeout.
+longitude/latitude coordinates before enabling a source. Paginated WFS, OGC API,
+and ArcGIS loaders stop after at most 40 pages. WFS requests 500 features per
+page; OGC API and ArcGIS page sizes depend on the configured service. Public
+source fetches have a 30-second abort timeout. Private imported-boundary queries
+discard obsolete responses, but do not use that fetch abort signal.
 
 The catalogue WFS endpoint for Kreis Wesel advertises GeoJSON but failed browser
 CORS verification and is not used. A separate KRZN OGC API Features collection
@@ -377,8 +397,9 @@ The initial run on 2026-10-09 found 29 unique packages and 59 resources:
 26 WFS, 8 OGC API Features, 14 WMS, and 11 downloads. The resources remain
 private `candidate` rows in Supabase; map activation is managed separately in
 `config.js`. Four reviewed KRZN collections are now configured as map sources.
-The app's published boundary coverage is Bielefeld, the Rhein-Kreis Neuss
-snapshot, and the four KRZN regions listed above.
+The enabled map sources, including additional NRW, Trier, and Niedersachsen
+regions, are listed in **Data Coverage** and configured in `config.js`.
+The harvesting inventory is separate from the app's enabled coverage.
 
 `harvesting-schema.sql` creates the private Supabase review table. The optional
 `-Upload` switch upserts candidates only when a trusted process provides
@@ -395,21 +416,31 @@ zone, not a suitable single projection for all of Germany.
 ## PWA And Hosting
 
 Serve the repository root over HTTPS or a localhost HTTP server; opening the
-HTML as a file will not support ES modules or service workers. The running local
-preview is `http://localhost:8087/Jagdkarte/`. The app works on GitHub Pages and
+HTML as a file will not support ES modules or service workers. An example local
+preview URL is `http://localhost:8087/Jagdkarte/`; the actual port depends on your
+server. For real authentication, allowlist the exact preview URL in Supabase.
+The app works on GitHub Pages and
 uses relative URLs, a scoped service worker, and 192/512px installation icons.
 
 The app shell and bundled libraries are cached offline. Selected region
 boundaries are stored in the browser Cache API: selecting a region shows its
 saved boundaries immediately, while **Reviergrenzen aktualisieren** explicitly
 fetches and replaces that region's cache. Only the selected source is fetched.
-Authentication, cache misses, explicit refreshes, and background maps require a
+Only public regional boundaries use this persistent boundary cache. Private
+imported boundaries are loaded from Supabase, not cached here, and are removed
+from the map and results on logout or account changes. Authentication, private
+profiles and writes, cache misses, explicit refreshes, and background maps require a
 connection. Standard OSM tiles may use the browser's HTTP cache according to
 the server's caching headers, but the app does not prefetch or promise offline
 tiles, respecting the tile usage policy:
 https://operations.osmfoundation.org/policies/tiles/ . For offline basemaps,
 use a provider that explicitly permits them or self-hosted tiles. Offline
 authentication is not simulated. Loaded polygons remain cached across reloads.
+
+The offline shell includes `hilfe.html`, `hilfe.js`, `geometry.js`, and
+`profile-data.js`. Offline navigation first tries the requested cached page,
+so opening the help does not incorrectly return the map. Other uncached
+same-origin pages fall back to `index.html`.
 
 For a new deployment, increment the cache version in `sw.js` whenever a cached
 asset changes, including authentication configuration. Installation reloads shell
@@ -463,7 +494,13 @@ marker rules, and the single-RPC import adapter. A disposable iframe runs the
 real app with an isolated Supabase/GPS double to check stale hunting-mode
 consent, private-boundary cleanup on logout, and obsolete write responses.
 No real authentication, database writes, location requests, or tile downloads
-are used by this test fixture.
+are used by this test fixture. All 25 checks passed on 2026-10-14.
+
+The help and map toolbar were checked at 320, 390, and 1440 pixel widths, with
+mobile and desktop screenshots. All 37 required offline-shell resources were
+reachable. A simulated service-worker test confirmed cached help navigation
+and the map fallback. These checks apply to the local working copy, not an
+authenticated production session.
 
 `geometry.js` owns shared boundary checks. `profile-data.js` owns paginated
 profile reads, location-consent eligibility, marker-rule mapping, and import
@@ -471,12 +508,17 @@ persistence. `app.js` retains UI orchestration and uses one activation path for
 owners and members. Paginated reads use stable ordering and discard incomplete
 or obsolete responses.
 
-The owner-profile and marker UI was checked at desktop and mobile sizes. The
-previous schema was applied to the live project and anonymous REST access was
-rejected. The new import RPC and central marker-rule table still require running
-the updated `schema.sql` in Supabase before deployment. Isolated PostgreSQL
-checks verified repeatable schema application, import rollback, duplicate
-handling, and import permission checks with mocked PostGIS functions. They do
-not replace actual PostGIS and authenticated owner/member RLS verification.
-A real owner-profile write and two-account invitation round-trip still need
+On 2026-10-14 the project owner confirmed updating the database and repository
+for the transactional import and central marker rules. Read-only production
+checks confirmed the published refactored app files (shell v65), anonymous
+HTTP 200 reads of `hunting_temporary_marker_types` with the expected GPS/editor
+rules, and HTTP 401 rejection of anonymous `hunting_profiles` reads. The working
+copy subsequently added beginner help and shell v66; publication of that later
+revision has not been verified here.
+
+Isolated PostgreSQL checks verified repeatable schema application, import
+rollback, duplicate handling, and import permission checks with mocked PostGIS
+functions. They do not replace actual Supabase/PostGIS and authenticated
+owner/member RLS verification. Production transactional imports, owner/member
+writes, location sharing, and a two-account invitation round-trip still need
 testing with signed-in users and working email delivery.
