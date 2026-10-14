@@ -1638,7 +1638,7 @@ element('download').addEventListener('click', async () => {
       source: source.metadataUrl, attribution: source.attribution, license: source.license,
       sourceSnapshotDate: source.snapshotDate || null, retrievedAt: new Date().toISOString()
     });
-    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(exported)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
