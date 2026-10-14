@@ -1642,7 +1642,7 @@ element('download').addEventListener('click', async () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'jagdrevier.jwd';
+    link.download = `${exported.title.trim().replace(/(?:\.(?:geojson|jwd))+$/i, '')}.jwd`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {

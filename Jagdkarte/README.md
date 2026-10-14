@@ -114,7 +114,7 @@ confirmation warning. `Bock`, `Erdsitz`, and `Salzlecke` have distinct marker
 types but currently use the **Sonstiges** icon. Unknown types also use that icon,
 with the original type retained in the marker notes.
 
-The download button exports the selected revier as `jagdrevier.jwd`, including
+The download button exports the selected revier as `<Reviername>.jwd`, including
 all boundary components and polygon holes as pacified areas. Guests and signed-out
 users receive boundaries only. Owners and Bearbeiter additionally receive all
 persistent markers from the active profile, including types, titles, coordinates,
