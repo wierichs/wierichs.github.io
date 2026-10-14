@@ -76,6 +76,7 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .profile-section .result-heading { margin: 0 0 8px; padding: 0; border: 0; gap: 8px; }
 .profile-section .result-heading button, .profile-actions button, #invite-form button { min-height: 36px; padding: 7px 10px; font-size: 12px; }
 .profile-section > p, #marker-coordinates { color: var(--muted); font-size: 12px; line-height: 1.5; }
+#marker-expiry-note { margin: -2px 0 8px; }
 #presence-status { margin: 8px 0; }
 .profile-section label { margin-top: 10px; }
 .profile-section select, .profile-section input { margin-bottom: 8px; }

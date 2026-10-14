@@ -473,6 +473,9 @@ function updateProfileControls() {
     option.disabled = !canEdit && !markerTypesById.get(option.value)?.temporary;
     option.hidden = option.disabled;
   });
+  Array.from(select.querySelectorAll('optgroup')).forEach(group => {
+    group.hidden = !Array.from(group.querySelectorAll('option')).some(option => !option.disabled);
+  });
   if (select.selectedOptions[0]?.disabled) select.value = availableTypes[0]?.id || '';
   updateSavedProfileSelection();
 }
@@ -505,13 +508,17 @@ async function loadMarkerTypes() {
   markerTypes = parsedTypes;
   fallbackMarkerType = catalog.fallbackType;
   const select = element('marker-type');
-  select.replaceChildren();
+  const permanentGroup = document.createElement('optgroup');
+  permanentGroup.label = 'Dauerhaft';
+  const temporaryGroup = document.createElement('optgroup');
+  temporaryGroup.label = 'Temporär · 48 Stunden';
   markerTypes.forEach(type => {
     const option = document.createElement('option');
     option.value = type.id;
     option.textContent = type.label;
-    select.append(option);
+    (type.temporary ? temporaryGroup : permanentGroup).append(option);
   });
+  select.replaceChildren(permanentGroup, temporaryGroup);
   select.value = fallbackMarkerType;
 }
 
