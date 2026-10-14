@@ -71,6 +71,29 @@ export function parseJwdImport(text) {
   };
 }
 
+export function createJwdExport(name, geometry, markers = [], markerTypes = [], includeMarkers = false) {
+  if (!geometry || !['Polygon', 'MultiPolygon'].includes(geometry.type)) {
+    throw new Error('Die Reviergrenze ist kein Polygon.');
+  }
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  const convertRing = ring => ring.map(([longitude, latitude]) => ({ latitude, longitude }));
+  const typesById = new Map(markerTypes.map(type => [type.id, type]));
+  return {
+    title: name,
+    huntingGround: {
+      borders: polygons.map(polygon => convertRing(polygon[0])),
+      pacifiedAreas: polygons.flatMap(polygon => polygon.slice(1).map(convertRing)),
+      facilities: includeMarkers ? markers.filter(marker => marker.expires_at == null &&
+        !typesById.get(marker.type_id)?.temporary).map(marker => ({
+        coordinate: { latitude: marker.latitude, longitude: marker.longitude },
+        type: typesById.get(marker.type_id)?.label || marker.type_id,
+        title: marker.title || '',
+        notes: marker.notes || ''
+      })) : []
+    }
+  };
+}
+
 function normalizeType(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('de-DE');
 }

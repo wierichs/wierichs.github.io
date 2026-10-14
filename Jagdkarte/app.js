@@ -1599,19 +1599,57 @@ element('marker-form').addEventListener('submit', async event => {
     button.disabled = false;
   }
 });
-element('download').addEventListener('click', () => {
-  if (!selected) return;
+element('download').addEventListener('click', async () => {
+  const button = element('download');
+  if (!selected || button.disabled) return;
+  const feature = selected;
+  const profile = activeProfile;
+  const userId = user?.id;
+  const sessionRevision = authRevision;
+  const activationRevision = profileActivationRevision;
+  const includeMarkers = canEditProfile(profile);
   const source = currentSource();
-  const blob = new Blob([JSON.stringify({ type: 'FeatureCollection', features: [selected],
-    source: source.metadataUrl, attribution: source.attribution, license: source.license,
-    sourceSnapshotDate: source.snapshotDate || null, retrievedAt: new Date().toISOString()
-  }, null, 2)], { type: 'application/geo+json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'jagdbezirk.geojson';
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const isCurrent = () => selected === feature && activeProfile?.id === profile?.id &&
+    user?.id === userId && authRevision === sessionRevision && profileActivationRevision === activationRevision &&
+    (!includeMarkers || canEditProfile());
+  button.disabled = true;
+  try {
+    const { createJwdExport } = await import('./jwd-import.js');
+    if (!isCurrent()) return;
+    const markers = [];
+    if (includeMarkers) {
+      if (!supabaseClient) throw new Error('Markierungen sind nicht verfuegbar.');
+      const pageSize = 1000;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabaseClient.from('hunting_markers')
+          .select('type_id,title,notes,latitude,longitude,expires_at')
+          .eq('profile_id', profile.id).is('expires_at', null).order('id')
+          .range(offset, offset + pageSize - 1);
+        if (!isCurrent()) return;
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error('Markierungen konnten nicht geladen werden.');
+        markers.push(...data);
+        if (data.length < pageSize) break;
+      }
+    }
+    const exported = createJwdExport(profile?.district_name || featureName(feature, source),
+      feature.geometry, markers, markerTypes, includeMarkers);
+    Object.assign(exported, {
+      source: source.metadataUrl, attribution: source.attribution, license: source.license,
+      sourceSnapshotDate: source.snapshotDate || null, retrievedAt: new Date().toISOString()
+    });
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'jagdrevier.jwd';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    if (isCurrent()) showMapStatus(`Revier konnte nicht heruntergeladen werden: ${error.message}`, 'error');
+  } finally {
+    button.disabled = false;
+  }
 });
 element('locate').addEventListener('click', () => {
   showMapStatus('Standort wird bestimmt ...', 'pending');

@@ -1,5 +1,5 @@
 import { loadBoundaries } from './data.js';
-import { findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } from './jwd-import.js';
+import { createJwdExport, findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } from './jwd-import.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -53,6 +53,32 @@ export async function runDataTests() {
   assert(imported.facilities.length === 1 && imported.facilities[0].type === 'Bock',
     'JWD import did not preserve facility data.');
   passed.push('JWD converts boundaries, pacified areas, and facilities');
+
+  const exportTypes = [{ id: 'bock', label: 'Bock' }, { id: 'anschuss', label: 'Anschuss', temporary: true }];
+  const exportMarkers = [
+    { type_id: 'bock', title: 'Bock 1', notes: 'Am Waldrand', latitude: 1.5, longitude: 1.5, expires_at: null },
+    { type_id: 'anschuss', title: 'Temporary type', latitude: 1, longitude: 1, expires_at: null },
+    { type_id: 'bock', title: 'Expiring marker', latitude: 1, longitude: 1, expires_at: '2099-01-01' },
+    { type_id: 'unknown', title: 'Other permanent', latitude: 1.2, longitude: 1.2, expires_at: null }
+  ];
+  const boundaryOnly = parseJwdImport(JSON.stringify(createJwdExport(imported.name, imported.geometry,
+    exportMarkers, exportTypes)));
+  assert(boundaryOnly.facilities.length === 0 && JSON.stringify(boundaryOnly.geometry) === JSON.stringify(imported.geometry),
+    'JWD boundary-only export leaked markers or changed the polygon holes.');
+  passed.push('JWD boundary-only export excludes all markers and preserves polygon holes');
+
+  const fullExport = createJwdExport(imported.name, imported.geometry, exportMarkers, exportTypes, true);
+  const roundTrip = parseJwdImport(JSON.stringify(fullExport));
+  assert(roundTrip.facilities.length === 2 && roundTrip.facilities[0].type === 'Bock' &&
+    roundTrip.facilities[1].type === 'unknown' && fullExport.huntingGround.facilities[0].notes === 'Am Waldrand',
+    'JWD full export lost persistent markers or included temporary markers.');
+  passed.push('JWD full export includes all persistent types, titles, coordinates and notes, but no temporary markers');
+
+  const multiGeometry = { type: 'MultiPolygon', coordinates: [imported.geometry.coordinates,
+    [[[3, 3], [4, 3], [4, 4], [3, 3]]]] };
+  assert(JSON.stringify(parseJwdImport(createJwdExport('Multi', multiGeometry)).geometry) === JSON.stringify(multiGeometry),
+    'JWD export did not preserve all MultiPolygon components and holes.');
+  passed.push('JWD export preserves MultiPolygon boundaries');
 
   const mappedFacilities = mapJwdFacilities([
     { latitude: 1, longitude: 1, type: 'Bock', title: '' },
