@@ -3,6 +3,8 @@ import { boundaries, loadBoundaries, featureName } from './data.js';
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
 const selectionStorageKey = 'jagdkarte-last-selection-v1';
+const markerIconSizeStorageKey = 'jagdkarte-marker-icon-size-v1';
+const markerIconScales = { small: 0.8, standard: 1, large: 1.25 };
 const element = id => document.getElementById(id);
 const map = L.map('map').setView([51.1, 10.4], 6);
 const mapSurface = element('map-surface');
@@ -45,6 +47,7 @@ let profileRevision = 0;
 let markerTypes = [];
 let markerTypesById = new Map();
 let fallbackMarkerType = 'sonstiges';
+let markerIconSize = readMarkerIconSize();
 let locationInterval = null;
 let locationRequestPending = false;
 let sharingProfileId = null;
@@ -425,6 +428,13 @@ function saveSelection(selection) {
 }
 
 function profileStatus(message) { element('profile-status').textContent = message; }
+function readMarkerIconSize() {
+  try {
+    const size = localStorage.getItem(markerIconSizeStorageKey);
+    return Object.hasOwn(markerIconScales, size) ? size : 'standard';
+  } catch { return 'standard'; }
+}
+
 function canEditProfile(profile = activeProfile) {
   return Boolean(user && profile && (profile.owner_id === user.id || profile.member_role === 'editor'));
 }
@@ -585,12 +595,13 @@ async function loadProfileMarkers() {
       });
       popup.append(remove);
     }
+    const scale = markerIconScales[markerIconSize];
     const mapMarker = L.marker([marker.latitude, marker.longitude], {
       icon: L.icon({
         iconUrl: type.iconUrl,
-        iconSize: type.iconSize,
-        iconAnchor: type.iconAnchor,
-        popupAnchor: type.popupAnchor,
+        iconSize: type.iconSize.map(value => Math.round(value * scale)),
+        iconAnchor: type.iconAnchor.map(value => Math.round(value * scale)),
+        popupAnchor: type.popupAnchor.map(value => Math.round(value * scale)),
         alt: type.label,
         title: type.label
       })
@@ -1358,6 +1369,19 @@ element('display-name-form').addEventListener('submit', async event => {
     : displayName ? 'Anzeigename gespeichert.' : 'Anzeigename entfernt.';
   if (!error && activeProfile?.hunting_mode) void loadProfileLocations();
 });
+element('marker-icon-size').addEventListener('change', event => {
+  const size = event.currentTarget.value;
+  if (!Object.hasOwn(markerIconScales, size)) return;
+  markerIconSize = size;
+  element('marker-icon-size-status').hidden = false;
+  try {
+    localStorage.setItem(markerIconSizeStorageKey, size);
+    element('marker-icon-size-status').textContent = 'Einstellung auf diesem Gerät gespeichert.';
+  } catch {
+    element('marker-icon-size-status').textContent = 'Einstellung gilt bis zum Schließen dieser Seite.';
+  }
+  if (activeProfile && user) void loadProfileMarkers();
+});
 element('hunting-mode').addEventListener('change', async event => {
   const profile = activeProfile;
   if (!profile || !canEditProfile(profile) || !supabaseClient) return;
@@ -1669,6 +1693,8 @@ async function applySession(session) {
 element('user-label').addEventListener('click', async () => {
   if (!user) return;
   element('display-name-status').hidden = true;
+  element('marker-icon-size').value = markerIconSize;
+  element('marker-icon-size-status').hidden = true;
   await loadOwnDisplayName();
   if (!user) return;
   element('display-name-dialog').showModal();

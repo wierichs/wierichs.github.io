@@ -83,7 +83,7 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .display-name-row { display: flex; align-items: center; gap: 8px; }
 .display-name-row input { flex: 1; margin-bottom: 0; }
 .display-name-row button { flex: 0 0 42px; }
-#display-name-status { margin: 6px 0; }
+#display-name-status, #marker-icon-size-status { margin: 6px 0; color: var(--muted); font-size: 12px; }
 .profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 #invite-form, #marker-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .profile-marker-popup { min-width: 150px; }
