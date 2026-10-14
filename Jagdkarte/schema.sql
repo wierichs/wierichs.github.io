@@ -71,7 +71,7 @@ alter table public.hunting_profiles add column if not exists boundary_geojson js
 alter table public.hunting_profiles add column if not exists hunting_mode boolean not null default false;
 alter table public.hunting_markers add column if not exists expires_at timestamptz;
 update public.hunting_markers set expires_at = created_at + interval '48 hours'
-  where type_id in ('anschuss', 'wildsichtung') and expires_at is null;
+  where type_id in ('anschuss', 'wildsichtung', 'standplatz') and expires_at is null;
 
 create index if not exists hunting_markers_expiry_idx on public.hunting_markers(expires_at)
   where expires_at is not null;
@@ -241,7 +241,7 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-  if new.type_id in ('anschuss', 'wildsichtung') then
+  if new.type_id in ('anschuss', 'wildsichtung', 'standplatz') then
     new.created_at := now();
     new.expires_at := new.created_at + interval '48 hours';
   else
@@ -272,7 +272,7 @@ begin
   if auth.uid() is null or not public.can_view_hunting_profile(p_profile_id) then
     raise exception 'Nur Owner und eingeladene Mitglieder duerfen Meldungen setzen';
   end if;
-  if p_type_id is null or p_type_id not in ('anschuss', 'wildsichtung') then
+  if p_type_id is null or p_type_id not in ('anschuss', 'wildsichtung', 'standplatz') then
     raise exception 'Ungueltige temporaere Meldungsart';
   end if;
   if p_latitude is null or p_longitude is null or p_user_latitude is null or p_user_longitude is null
@@ -406,7 +406,7 @@ create policy "Markers visible to profile members" on public.hunting_markers
 drop policy if exists "Profile owner can create markers" on public.hunting_markers;
 create policy "Profile owner can create markers" on public.hunting_markers
   for insert to authenticated with check (public.can_edit_hunting_profile(profile_id)
-    and type_id not in ('anschuss', 'wildsichtung') and expires_at is null
+    and type_id not in ('anschuss', 'wildsichtung', 'standplatz') and expires_at is null
     and created_by = (select auth.uid()));
 drop policy if exists "Profile owner can delete markers" on public.hunting_markers;
 create policy "Profile owner can delete markers" on public.hunting_markers
@@ -414,7 +414,7 @@ create policy "Profile owner can delete markers" on public.hunting_markers
 drop policy if exists "Members can delete their own temporary markers" on public.hunting_markers;
 create policy "Members can delete their own temporary markers" on public.hunting_markers
   for delete to authenticated using (public.can_view_hunting_profile(profile_id)
-    and type_id in ('anschuss', 'wildsichtung') and created_by = (select auth.uid()));
+    and type_id in ('anschuss', 'wildsichtung', 'standplatz') and created_by = (select auth.uid()));
 
 drop policy if exists "Owners can view profile locations" on public.hunting_profile_locations;
 drop policy if exists "Profile members can view locations" on public.hunting_profile_locations;

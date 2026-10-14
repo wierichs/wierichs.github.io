@@ -92,8 +92,8 @@ passwordless sign-in/registration link, and the invited user receives that role
 after verifying the same address. Bearbeiter can manage boundaries, invitations,
 the Jagdmodus, and permanent markers like the owner, but cannot delete the
 profile. Only the owner can delete it. All members can create temporary
-**Anschuss** and **Wildsichtung** markers while their current browser-reported
-location is inside the district. Members can delete their own temporary markers;
+**Anschuss**, **Wildsichtung**, and **Standplatz** markers while their current
+browser-reported location is inside the district. Members can delete their own temporary markers;
 owners and Bearbeiter can delete any marker.
 Each signed-in user can click their email address in the header to set an
 optional **Anzeigename** for shared-revier participants. Only members of a
@@ -143,8 +143,10 @@ location-sharing entry. Browser geolocation can be spoofed and is not proof of
 physical presence. An owner can manage the stored boundary, so this is a private
 profile constraint, not verification against an independent official boundary.
 
-For existing profiles, the owner must open the district/profile once after the
-schema update to register its boundary. Until then, temporary creation fails
+After adding or changing temporary marker types, rerun `schema.sql` in Supabase
+so its RPC and row-level security allow-list matches the catalog. For existing
+profiles, the owner must open the district/profile once after the schema update
+to register its boundary. Until then, temporary creation fails
 closed with an explanatory error. `delete-expired-hunting-markers` is the named
 cron job; check its execution history in Supabase after applying the schema.
 The browser and mocked API checks do not replace a real owner/member RLS test.

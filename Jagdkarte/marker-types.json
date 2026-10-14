@@ -109,6 +109,15 @@
       "popupAnchor": [0, -42]
     },
     {
+      "id": "standplatz",
+      "label": "Standplatz",
+      "temporary": true,
+      "iconUrl": "./markers/standplatz.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
       "id": "sonstiges",
       "label": "Sonstiges",
       "iconUrl": "./markers/sonstiges.svg",
