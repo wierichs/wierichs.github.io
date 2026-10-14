@@ -8,6 +8,8 @@ button:hover:not(:disabled) { background: #edf3ef; border-color: #a4b9ac; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button.primary { background: var(--green); color: white; border-color: var(--green); }
 button.primary:hover:not(:disabled) { background: #163e2e; }
+button.danger { background: #a33830; color: white; border-color: #a33830; }
+button.danger:hover:not(:disabled) { background: #842b25; }
 .icon-button { width: 42px; height: 42px; padding: 10px; flex: 0 0 42px; }
 .topbar svg, button svg { width: 20px; height: 20px; flex-shrink: 0; }
 a { color: var(--green); }

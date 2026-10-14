@@ -34,6 +34,7 @@ let savedProfiles = [];
 let savedProfilesRevision = 0;
 let savedOpenRevision = 0;
 let savedProfilePending = false;
+let profileDeletePending = false;
 let activeProfile = null;
 let placementMode = false;
 let markerCoordinates = null;
@@ -300,6 +301,9 @@ function updateProfileControls() {
   const canCreate = Boolean(user && selected && selectedFeatureId());
   element('claim-profile').hidden = !canCreate || profiles.some(profile => profile.owner_id === user.id);
   element('invite-toggle').hidden = !canEdit;
+  const isOwner = Boolean(user && activeProfile?.owner_id === user.id);
+  element('delete-profile').hidden = !isOwner;
+  element('delete-profile').disabled = profileDeletePending;
   element('hunting-mode-control').hidden = !canEdit;
   element('owner-location-notice').hidden = !canEdit;
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
@@ -751,7 +755,18 @@ async function loadProfiles(preferredId) {
     return;
   }
   const memberRoles = new Map((memberships || []).map(member => [member.profile_id, member.role]));
+  const sharedProfileIds = (data || []).filter(profile => profile.owner_id !== user.id).map(profile => profile.id);
+  let ownerEmails = [];
+  if (sharedProfileIds.length) {
+    const { data: emails } = await supabaseClient.rpc('get_hunting_profile_owner_emails', {
+      p_profile_ids: sharedProfileIds
+    });
+    if (revision !== profileRevision) return;
+    ownerEmails = emails || [];
+  }
+  const ownerEmailByProfileId = new Map(ownerEmails.map(owner => [owner.profile_id, owner.owner_email]));
   profiles = (data || []).map(profile => ({ ...profile,
+    owner_email: ownerEmailByProfileId.get(profile.id) || null,
     member_role: profile.owner_id === user.id ? 'owner' : memberRoles.get(profile.id) || 'guest'
   }));
   const profileSelect = element('profile-list');
@@ -761,7 +776,9 @@ async function loadProfiles(preferredId) {
     option.value = profile.id;
     const profileLabel = profile.owner_id === user.id ? 'Owner'
       : profile.member_role === 'editor' ? 'Bearbeiter' : 'Gast';
-    option.textContent = `${profileLabel} - ${profile.district_name}`;
+    const ownerAddress = profile.owner_id === user.id ? user.email || user.id.slice(0, 8)
+      : profile.owner_email || profile.owner_id.slice(0, 8);
+    option.textContent = `${profileLabel} - ${profile.district_name} @${ownerAddress}`;
     profileSelect.append(option);
   });
   const guestOption = document.createElement('option');
@@ -1216,6 +1233,30 @@ element('invite-toggle').addEventListener('click', () => {
   element('invite-form').hidden = !element('invite-form').hidden;
   if (!element('invite-form').hidden) element('invite-email').focus();
 });
+async function deleteActiveProfile() {
+  const profile = activeProfile;
+  const userId = user?.id;
+  if (!profile || !userId || profile.owner_id !== userId || !supabaseClient || profileDeletePending) return;
+  if (!window.confirm(`Dein Revierprofil "${profile.district_name}" loeschen? Das Profil anderer Owner bleibt bestehen.`)) return;
+  profileDeletePending = true;
+  updateProfileControls();
+  profileStatus('Eigenes Revierprofil wird geloescht ...');
+  const { data, error } = await supabaseClient.from('hunting_profiles').delete().eq('id', profile.id).select('id');
+  profileDeletePending = false;
+  if (user?.id !== userId) return;
+  if (error || !data?.some(deleted => deleted.id === profile.id)) {
+    updateProfileControls();
+    profileStatus(error ? `Revierprofil konnte nicht geloescht werden: ${error.message}`
+      : 'Revierprofil wurde nicht geloescht. Bitte Auswahl aktualisieren.');
+    return;
+  }
+  await stopProfileLocation();
+  activeProfile = null;
+  await loadProfiles();
+  void loadSavedProfiles();
+  profileStatus('Eigenes Revierprofil geloescht.');
+}
+element('delete-profile').addEventListener('click', () => void deleteActiveProfile());
 element('invite-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!auth || !supabaseClient || !canEditProfile()) return;
