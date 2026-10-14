@@ -1,4 +1,6 @@
 import { loadBoundaries } from './data.js';
+import { pointInFeature, pointInRing } from './geometry.js';
+import { applyMarkerRules, canShareProfileLocation, fetchAllRows, importJwdProfileData } from './profile-data.js';
 import { createJwdExport, findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } from './jwd-import.js';
 
 function assert(condition, message) {
@@ -30,6 +32,63 @@ async function withFetch(mock, action) {
 
 export async function runDataTests() {
   const passed = [];
+
+  const rowOffsets = [];
+  const allRows = await fetchAllRows(() => ({ async range(start) {
+    rowOffsets.push(start);
+    return { data: [0, 1, 2, 3, 4].slice(start, start + 2), error: null };
+  } }));
+  assert(allRows.data.join(',') === '0,1,2,3,4' && rowOffsets.join(',') === '0,2,4,5',
+    'Pagination stopped at a server-side page cap.');
+  const failedRows = await fetchAllRows(() => ({ async range(start) {
+    return start ? { data: null, error: { message: 'Failed page' } } : { data: [1], error: null };
+  } }));
+  assert(failedRows.data === null && failedRows.error.message === 'Failed page', 'Pagination exposed an incomplete result.');
+  let current = true;
+  const cancelledRows = await fetchAllRows(() => ({ async range() {
+    current = false;
+    return { data: [1], error: null };
+  } }), () => current);
+  assert(cancelledRows.data === null && cancelledRows.error === null, 'Pagination exposed results after cancellation.');
+  passed.push('Profile pagination handles server caps, later-page errors and cancellation');
+
+  const sharedProfile = { id: 'shared', owner_id: 'owner', hunting_mode: true };
+  const member = { id: 'member' };
+  assert(!canShareProfileLocation(sharedProfile, member, null), 'Shared GPS started without consent.');
+  assert(canShareProfileLocation(sharedProfile, member, { profileId: 'shared', userId: 'member' }), 'Bound consent was rejected.');
+  assert(!canShareProfileLocation(sharedProfile, member, { profileId: 'other', userId: 'member' }), 'Consent leaked across profiles.');
+  assert(!canShareProfileLocation(sharedProfile, member, { profileId: 'shared', userId: 'other' }), 'Consent leaked across users.');
+  assert(!canShareProfileLocation({ ...sharedProfile, hunting_mode: false }, { id: 'owner' }), 'GPS started with hunting mode off.');
+  assert(canShareProfileLocation(sharedProfile, { id: 'owner' }), 'Owner GPS was unexpectedly blocked.');
+  passed.push('Location consent is bound to user, profile and current hunting mode');
+
+  const importCalls = [];
+  const importResult = await importJwdProfileData({ async rpc(name, parameters) {
+    importCalls.push({ name, parameters });
+    return { data: { profile_id: 'imported', inserted_count: 1, duplicate_count: 0, outside_count: 0 }, error: null };
+  } }, { name: 'Revier', featureId: 'jwd-test', geometry: feature('test').geometry,
+    facilities: [{ typeId: 'bock', title: 'Bock', notes: 'Notiz', latitude: 1, longitude: 1 }] });
+  assert(importCalls.length === 1 && importCalls[0].name === 'import_hunting_profile' &&
+    importCalls[0].parameters.p_profile_id === null && importCalls[0].parameters.p_facilities[0].notes === 'Notiz' &&
+    importResult.profile_id === 'imported', 'JWD import did not use one transactional RPC.');
+  let importFailed = false;
+  try {
+    await importJwdProfileData({ async rpc() { return { data: null, error: { message: 'Import rejected' } }; } },
+      { name: 'Revier', facilities: [] });
+  } catch (error) { importFailed = error.message === 'Import rejected'; }
+  assert(importFailed, 'JWD import hid a database failure.');
+  passed.push('JWD persistence uses one RPC and propagates database failures');
+
+  const ruledTypes = applyMarkerRules([{ id: 'bock' }, { id: 'standplatz' }], [
+    { type_id: 'standplatz', requires_current_location: false, editors_only: true }
+  ]);
+  assert(!ruledTypes[0].temporary && ruledTypes[1].temporary && ruledTypes[1].editorsOnly &&
+    !ruledTypes[1].requiresCurrentLocation, 'Marker catalog did not use database rules.');
+  let invalidRulesRejected = false;
+  try { applyMarkerRules([{ id: 'bock' }], [{ type_id: 'missing', requires_current_location: true, editors_only: false }]); }
+  catch { invalidRulesRejected = true; }
+  assert(invalidRulesRejected, 'Unknown database marker rules were silently ignored.');
+  passed.push('Database marker rules control expiry category, editor rights and GPS requirements');
 
   const imported = parseJwdImport({
     title: ' Test Revier ',
@@ -75,7 +134,8 @@ export async function runDataTests() {
   passed.push('JWD export uses title, explicit latitude/longitude and root lat/lng');
   const roundTrip = parseJwdImport(JSON.stringify(fullExport));
   assert(roundTrip.facilities.length === 2 && roundTrip.facilities[0].type === 'Bock' &&
-    roundTrip.facilities[1].type === 'unknown' && fullExport.huntingGround.facilities[0].notes === 'Am Waldrand',
+    roundTrip.facilities[1].type === 'unknown' && roundTrip.facilities[0].notes === 'Am Waldrand' &&
+    mapJwdFacilities(roundTrip.facilities, exportTypes)[0].notes === 'Am Waldrand',
     'JWD full export lost persistent markers or included temporary markers.');
   passed.push('JWD full export includes all persistent types, titles, coordinates and notes, but no temporary markers');
 
@@ -104,6 +164,24 @@ export async function runDataTests() {
   assert(mappedFacilities[1].typeId === 'sonstiges' && mappedFacilities[1].notes.includes('Unbekannt'),
     'JWD import did not preserve an unknown marker type with the fallback icon type.');
   passed.push('JWD maps known types and preserves unknown types with the fallback');
+
+  const unknownWithNotes = { latitude: 1, longitude: 1, type: 'Unbekannt', title: 'Sonderpunkt', notes: ' Erste Zeile\nZweite Zeile ' };
+  const mappedUnknown = mapJwdFacilities([unknownWithNotes], exportTypes)[0];
+  assert(mappedUnknown.notes.endsWith(unknownWithNotes.notes), 'JWD mapping changed original note whitespace.');
+  assert(mapJwdFacilities([{ ...unknownWithNotes, notes: mappedUnknown.notes }], exportTypes)[0].notes === mappedUnknown.notes,
+    'JWD mapping duplicated the original-type note.');
+  passed.push('JWD preserves multiline notes and does not duplicate original-type annotations');
+
+  const polygonWithHole = { geometry: { type: 'Polygon', coordinates: [
+    [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]],
+    [[1, 1], [3, 1], [3, 3], [1, 3], [1, 1]]
+  ] } };
+  assert(pointInFeature({ lat: 0, lng: 2 }, polygonWithHole), 'Outer polygon boundary should be covered.');
+  assert(pointInFeature({ lat: 1, lng: 2 }, polygonWithHole), 'Hole boundary should match PostGIS ST_Covers.');
+  assert(!pointInFeature({ lat: 2, lng: 2 }, polygonWithHole), 'Polygon hole interior should not be covered.');
+  assert(!pointInRing({ lat: 0, lng: 2 }, polygonWithHole.geometry.coordinates[0], false),
+    'Strict containment accepted a boundary point.');
+  passed.push('Shared geometry checks handle polygon and hole boundaries consistently');
 
   const matchingProfiles = matchingEditableProfiles([
     { id: 'owner', district_name: ' Temmels ', owner_id: 'user-1', member_role: 'owner' },

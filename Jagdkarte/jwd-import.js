@@ -1,3 +1,5 @@
+import { pointInRing } from './geometry.js';
+
 function pointFromJwd(value, label) {
   const latitude = value?.latitude;
   const longitude = value?.longitude;
@@ -19,18 +21,6 @@ function closeRing(points, label) {
   return ring;
 }
 
-function pointInRing(point, ring) {
-  let inside = false;
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
-    const start = ring[previous];
-    const end = ring[index];
-    const crosses = (start[1] > point[1]) !== (end[1] > point[1]) &&
-      point[0] < (end[0] - start[0]) * (point[1] - start[1]) / (end[1] - start[1]) + start[0];
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
 export function parseJwdImport(text) {
   let data;
   try { data = typeof text === 'string' ? JSON.parse(text) : text; }
@@ -46,7 +36,8 @@ export function parseJwdImport(text) {
   if (!Array.isArray(pacifiedAreas)) throw new Error('Die befriedeten Bereiche haben ein ungueltiges Format.');
   pacifiedAreas.forEach((area, index) => {
     const ring = closeRing(area, `Befriedeter Bereich ${index + 1}`);
-    const polygonIndex = polygons.findIndex(polygon => ring.slice(0, -1).every(point => pointInRing(point, polygon[0])));
+    const polygonIndex = polygons.findIndex(polygon => ring.slice(0, -1).every(([longitude, latitude]) =>
+      pointInRing({ lat: latitude, lng: longitude }, polygon[0], false)));
     if (polygonIndex < 0) throw new Error(`Befriedeter Bereich ${index + 1} liegt nicht vollstaendig innerhalb einer Reviergrenze.`);
     polygons[polygonIndex].push(ring);
   });
@@ -59,7 +50,8 @@ export function parseJwdImport(text) {
       latitude,
       longitude,
       type: typeof facility.type === 'string' ? facility.type.trim() : '',
-      title: typeof facility.title === 'string' ? facility.title.trim() : ''
+      title: typeof facility.title === 'string' ? facility.title.trim() : '',
+      notes: typeof facility.notes === 'string' ? facility.notes : ''
     };
   });
   return {
@@ -161,10 +153,12 @@ export function mapJwdFacilities(facilities, markerTypes, fallbackType = 'sonsti
   return facilities.map((facility, index) => {
     const originalType = facility.type.trim();
     const knownType = typesByName.get(normalizeType(originalType));
+    const notes = facility.notes || '';
+    const originalTypeNote = `Importierter Originaltyp: ${originalType || 'nicht angegeben'}`;
     return {
       typeId: knownType?.id || fallbackType,
       title: facility.title || `${knownType?.label || originalType || 'Einrichtung'} ${index + 1}`,
-      notes: knownType ? '' : `Importierter Originaltyp: ${originalType || 'nicht angegeben'}`,
+      notes: knownType || notes.startsWith(originalTypeNote) ? notes : [originalTypeNote, notes].filter(Boolean).join('\n'),
       latitude: facility.latitude,
       longitude: facility.longitude
     };

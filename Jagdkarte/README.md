@@ -114,6 +114,14 @@ confirmation warning. `Bock`, `Erdsitz`, and `Salzlecke` have distinct marker
 types but currently use the **Sonstiges** icon. Unknown types also use that icon,
 with the original type retained in the marker notes.
 
+JWD notes, including line breaks and whitespace, survive export and reimport.
+The import writes through `import_hunting_profile` as one database transaction:
+invalid facilities roll back the profile, boundary, and all facilities together.
+Existing profiles are locked during the import; permissions, duplicates, and
+the current stored boundary are checked again on the server. Updating an existing
+profile never changes its boundary. Apply the updated `schema.sql` before
+deploying this app version; there is deliberately no non-transactional fallback.
+
 The download button exports the selected revier as `<Reviername>.jwd`, including
 all boundary components and polygon holes as pacified areas. Guests and signed-out
 users receive boundaries only. Owners and Bearbeiter additionally receive all
@@ -121,6 +129,7 @@ persistent markers from the active profile, including types, titles, coordinates
 and notes. Temporary markers are never exported. Marker loading failures prevent
 an incomplete download; switching profiles or signing out cancels a pending export.
 Source attribution and license information are retained in the file.
+Downloads use compact JSON without formatting whitespace; text values are unchanged.
 The JWD root uses `title` for the revier name and `lat`/`lng` for a reference
 point at the center of the bounding box of all outer boundary rings. This point
 is not guaranteed to lie inside irregular or disconnected reviers. Boundary
@@ -145,6 +154,10 @@ stored locations for that profile. Active clients poll the mode and stop locatio
 tracking after an owner or Bearbeiter changes it. Turning it on prompts each
 participant for location consent before tracking resumes. Rerun `schema.sql` to
 add profile roles, role-aware RPCs, and row-level security checks.
+Profile activation reads the current hunting mode before requesting consent.
+Consent is bound to the current user and profile and is not persisted. Signing
+out or switching accounts also clears private imported boundaries from the map,
+selection, and search results; public boundary datasets remain available.
 
 Temporary markers expire 48 hours after creation according to the database clock.
 RLS immediately hides expired rows; a pg_cron job deletes them every minute even
@@ -159,8 +172,12 @@ proof of physical presence. An owner can manage the stored boundary, so this is
 a private profile constraint, not verification against an independent official
 boundary. Standplatz creation still checks membership and the target position.
 
-After adding or changing temporary marker types, rerun `schema.sql` in Supabase
-so its RPC and row-level security allow-list matches the catalog. For existing
+Temporary marker rules are defined once in `hunting_temporary_marker_types`:
+`type_id`, `requires_current_location`, and `editors_only`. This non-sensitive
+rule table is publicly readable but cannot be written by app users. The UI loads
+these rules; expiry triggers, marker RPCs, and RLS use the same source. Do not
+add temporary/GPS/role flags to the icon catalog. Add the rule in `schema.sql`
+and apply it in Supabase when adding a temporary type. For existing
 profiles, the owner must open the district/profile once after the schema update
 to register its boundary. Until then, temporary creation fails
 closed with an explanatory error. `delete-expired-hunting-markers` is the named
@@ -434,14 +451,28 @@ Supabase session service and live WFS data, district selection, boundary visibil
 export, logout, desktop/mobile layout, and offline shell reload. The production
 app never uses the test session or test configuration.
 
-The focused data-loader tests are in `tests.html` and `data.test.js`. Serve the
+The focused tests are in `tests.html`, `data.test.js`, and `app.test.js`. Serve the
 repository root locally, then open `http://localhost:8087/Jagdkarte/tests.html`.
-They cover snapshots, WFS pagination, OGC API `next` links, and detection of an
-incomplete OGC API response.
+They cover data-service pagination, incomplete responses, JWD round trips and
+notes, shared geometry checks, Supabase page caps/errors/cancellation, database
+marker rules, and the single-RPC import adapter. A disposable iframe runs the
+real app with an isolated Supabase/GPS double to check stale hunting-mode
+consent, private-boundary cleanup on logout, and obsolete write responses.
+No real authentication, database writes, location requests, or tile downloads
+are used by this test fixture.
+
+`geometry.js` owns shared boundary checks. `profile-data.js` owns paginated
+profile reads, location-consent eligibility, marker-rule mapping, and import
+persistence. `app.js` retains UI orchestration and uses one activation path for
+owners and members. Paginated reads use stable ordering and discard incomplete
+or obsolete responses.
 
 The owner-profile and marker UI was checked at desktop and mobile sizes. The
-schema is now applied to the live project: SQL verification confirmed all four
-tables have RLS enabled, six policies and five RPC functions exist, and the
-`type_id` marker column is present. An anonymous REST read was rejected with
-HTTP 401. A real owner-profile write and two-account invitation round-trip still
-need testing with signed-in users and working email delivery.
+previous schema was applied to the live project and anonymous REST access was
+rejected. The new import RPC and central marker-rule table still require running
+the updated `schema.sql` in Supabase before deployment. Isolated PostgreSQL
+checks verified repeatable schema application, import rollback, duplicate
+handling, and import permission checks with mocked PostGIS functions. They do
+not replace actual PostGIS and authenticated owner/member RLS verification.
+A real owner-profile write and two-account invitation round-trip still need
+testing with signed-in users and working email delivery.

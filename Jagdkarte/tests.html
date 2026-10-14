@@ -10,16 +10,21 @@
   <pre id="results">Running tests...</pre>
   <script type="module">
     import { runDataTests } from './data.test.js';
+    import { initializeAppFixture, runAppTests } from './app.test.js';
 
-    const output = document.querySelector('#results');
-    try {
-      const passed = await runDataTests();
-      output.textContent = passed.map(test => `PASS ${test}`).join('\n');
-      document.body.dataset.testResult = 'passed';
-    } catch (error) {
-      output.textContent = `FAIL ${error.message}`;
-      document.body.dataset.testResult = 'failed';
-      console.error(error);
+    if (new URLSearchParams(location.search).has('app-fixture')) {
+      await initializeAppFixture();
+    } else {
+      const output = document.querySelector('#results');
+      try {
+        const passed = [...await runDataTests(), ...await runAppTests()];
+        output.textContent = passed.map(test => `PASS ${test}`).join('\n');
+        document.body.dataset.testResult = 'passed';
+      } catch (error) {
+        output.textContent = `FAIL ${error.message}`;
+        document.body.dataset.testResult = 'failed';
+        console.error(error);
+      }
     }
   </script>
 </body>

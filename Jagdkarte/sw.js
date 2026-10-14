@@ -1,5 +1,5 @@
-const CACHE = 'jagdkarte-shell-v64';
-const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './config.js',
+const CACHE = 'jagdkarte-shell-v65';
+const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './geometry.js', './profile-data.js', './config.js',
   './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
   './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/leiter.svg',
   './markers/kanzel.svg', './markers/drueckjagdbock.svg', './markers/kirrung.svg', './markers/sonstiges.svg',

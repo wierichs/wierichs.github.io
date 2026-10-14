@@ -1,4 +1,6 @@
 import { boundaries, loadBoundaries, featureName } from './data.js';
+import { pointInFeature } from './geometry.js';
+import { applyMarkerRules, canShareProfileLocation, fetchAllRows, importJwdProfileData } from './profile-data.js';
 
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
@@ -57,6 +59,7 @@ let huntingModeInterval = null;
 let presenceRevision = 0;
 let profileActivationRevision = 0;
 let pendingProfileId = null;
+let locationConsent = null;
 let huntingModePending = false;
 const profileMarkers = L.layerGroup().addTo(map);
 const profileLocations = L.layerGroup().addTo(map);
@@ -170,12 +173,13 @@ async function loadSavedProfiles() {
   element('saved-view').setAttribute('aria-busy', 'true');
   element('saved-status').textContent = 'Gespeicherte Reviere werden geladen ...';
   try {
-    const { data, error } = await supabaseClient.from('hunting_profiles')
-      .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode').order('district_name');
+    const isCurrent = () => revision === savedProfilesRevision && user?.id === userId;
+    const { data, error } = await fetchAllRows(() => supabaseClient.from('hunting_profiles')
+      .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode').order('district_name').order('id'), isCurrent);
     if (revision !== savedProfilesRevision || user?.id !== userId) return false;
     if (error) throw new Error(error.message);
-    const { data: memberships, error: membershipError } = await supabaseClient.from('hunting_profile_members')
-      .select('profile_id,role').eq('user_id', userId);
+    const { data: memberships, error: membershipError } = await fetchAllRows(() => supabaseClient.from('hunting_profile_members')
+      .select('profile_id,role').eq('user_id', userId).order('profile_id'), isCurrent);
     if (revision !== savedProfilesRevision || user?.id !== userId) return false;
     if (membershipError) throw new Error(membershipError.message);
     const memberRoles = new Map((memberships || []).map(member => [member.profile_id, member.role]));
@@ -183,9 +187,9 @@ async function loadSavedProfiles() {
     let ownerEmails = [];
     let ownerEmailError = null;
     if (sharedProfileIds.length) {
-      const { data: emails, error: emailError } = await supabaseClient.rpc('get_hunting_profile_owner_emails', {
+      const { data: emails, error: emailError } = await fetchAllRows(() => supabaseClient.rpc('get_hunting_profile_owner_emails', {
         p_profile_ids: sharedProfileIds
-      });
+      }).order('profile_id'), isCurrent);
       if (revision !== savedProfilesRevision || user?.id !== userId) return false;
       if (emailError) ownerEmailError = emailError;
       else ownerEmails = emails || [];
@@ -256,7 +260,7 @@ async function importJwdProfile(file) {
   if (!user || !supabaseClient || profileImportPending) return;
   const userId = user.id;
   let createdProfileId = null;
-  let createdNewProfile = false;
+  let insertedCount = 0;
   let importedFeatureId = null;
   let facilitiesToInsert = [];
   let duplicateCount = 0;
@@ -300,8 +304,9 @@ async function importJwdProfile(file) {
       const { data: profileData, error: profileError } = await supabaseClient.from('hunting_profiles')
         .select('boundary_geojson').eq('id', existingProfile.id).maybeSingle();
       if (profileError || !profileData) throw new Error(`Vorhandenes Revierprofil konnte nicht geladen werden: ${profileError?.message || 'Profil nicht verfuegbar'}`);
-      const { data: existingMarkers, error: markerLoadError } = await supabaseClient.from('hunting_markers')
-        .select('type_id,title,latitude,longitude').eq('profile_id', existingProfile.id);
+      const { data: existingMarkers, error: markerLoadError } = await fetchAllRows(() => supabaseClient.from('hunting_markers')
+        .select('type_id,title,latitude,longitude').eq('profile_id', existingProfile.id).order('id'), () => user?.id === userId);
+      if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
       if (markerLoadError) throw new Error(`Vorhandene Markierungen konnten nicht geladen werden: ${markerLoadError.message}`);
       const additions = findJwdFacilityAdditions(mappedFacilities, existingMarkers || []);
       duplicateCount = additions.duplicateCount;
@@ -331,46 +336,20 @@ async function importJwdProfile(file) {
     ].join('\n');
     if (!window.confirm(summary)) return;
 
-    if (existingProfile) {
-      createdProfileId = existingProfile.id;
-    } else {
-      const featureId = `jwd-${crypto.randomUUID()}`;
-      importedFeatureId = featureId;
-      const { data, error } = await supabaseClient.rpc('create_hunting_profile', {
-        p_source_id: 'user-imports', p_feature_id: featureId, p_district_name: imported.name
-      });
-      if (error) throw new Error(error.message);
-      createdProfileId = data?.id || data?.[0]?.id;
-      if (!createdProfileId) throw new Error('Das Revierprofil wurde ohne Profil-ID angelegt.');
-      createdNewProfile = true;
-      const { error: boundaryError } = await supabaseClient.rpc('set_hunting_profile_boundary', {
-        p_profile_id: createdProfileId, p_geometry: imported.geometry
-      });
-      if (boundaryError) throw new Error(boundaryError.message);
-    }
     if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
-
-    if (facilitiesToInsert.length) {
-      const { error: markerError } = await supabaseClient.from('hunting_markers').insert(facilitiesToInsert.map(marker => ({
-        profile_id: createdProfileId,
-        type_id: marker.typeId,
-        title: marker.title,
-        notes: marker.notes,
-        latitude: marker.latitude,
-        longitude: marker.longitude,
-        created_by: userId
-      })));
-      if (markerError) throw new Error(markerError.message);
-    }
+    importedFeatureId = existingProfile ? null : `jwd-${crypto.randomUUID()}`;
+    const result = await importJwdProfileData(supabaseClient, {
+      profileId: existingProfile?.id, featureId: importedFeatureId, name: imported.name,
+      geometry: imported.geometry, facilities: facilitiesToInsert
+    });
+    createdProfileId = result.profile_id;
+    insertedCount = result.inserted_count;
+    duplicateCount += result.duplicate_count;
+    outsideTargetCount += result.outside_count;
   } catch (error) {
-    let cleanupMessage = '';
-    if (createdNewProfile && createdProfileId) {
-      const { error: cleanupError } = await supabaseClient.from('hunting_profiles').delete().eq('id', createdProfileId);
-      if (cleanupError) cleanupMessage = ` Das unvollstaendige Profil konnte nicht automatisch entfernt werden: ${cleanupError.message}`;
-    }
     if (user?.id === userId) {
       setDistrictTab('saved', false, false);
-      element('saved-status').textContent = `Import fehlgeschlagen: ${error.message}.${cleanupMessage}`;
+      element('saved-status').textContent = `Import fehlgeschlagen: ${error.message}.`;
     }
     return;
   } finally {
@@ -382,18 +361,21 @@ async function importJwdProfile(file) {
   if (existingProfile) {
     setDistrictTab('saved', false, false);
     await loadSavedProfiles();
-    element('saved-status').textContent = `${facilitiesToInsert.length} neue Ergaenzung(en) fuer "${existingProfile.district_name}" uebernommen; ${duplicateCount} Duplikat(e) uebersprungen. Grenze und bestehende Markierungen blieben unveraendert.`;
+    if (user?.id !== userId) return;
+    element('saved-status').textContent = `${insertedCount} neue Ergaenzung(en) fuer "${existingProfile.district_name}" uebernommen; ${duplicateCount} Duplikat(e) und ${outsideTargetCount} Markierung(en) ausserhalb der Grenze uebersprungen. Grenze und bestehende Markierungen blieben unveraendert.`;
     return;
   }
   element('source').value = 'user-imports';
   saveSelection(null);
   await loadSelectedSource();
+  if (user?.id !== userId || currentSource()?.id !== 'user-imports') return;
   const importedFeature = features.find(feature => featureIdentifier(feature, currentSource()) === importedFeatureId);
   if (importedFeature) {
     await selectFeature(importedFeature, null, createdProfileId);
     renderResults();
   }
   await loadSavedProfiles();
+  if (user?.id !== userId) return;
   element('saved-status').textContent = importedFeature
     ? 'Revierdatei importiert und geoeffnet.'
     : 'Revierdatei importiert. Waehle das Revier in der Liste aus.';
@@ -512,11 +494,15 @@ async function loadMarkerTypes() {
     }
     return { ...type, iconUrl: iconUrl.href };
   });
-  markerTypesById = new Map(parsedTypes.map(type => [type.id, type]));
-  if (markerTypesById.size !== parsedTypes.length || !markerTypesById.has(catalog.fallbackType)) {
+  const parsedTypesById = new Map(parsedTypes.map(type => [type.id, type]));
+  if (parsedTypesById.size !== parsedTypes.length || !parsedTypesById.has(catalog.fallbackType)) {
     throw new Error('Doppelte Objekttypen oder fehlender Fallback');
   }
-  markerTypes = parsedTypes;
+  const { data: rules, error: rulesError } = await fetchAllRows(() => supabaseClient.from('hunting_temporary_marker_types')
+    .select('type_id,requires_current_location,editors_only').order('type_id'));
+  if (rulesError) throw new Error(`Markerregeln nicht verfuegbar. Datenbankschema aktualisieren. (${rulesError.message})`);
+  markerTypes = applyMarkerRules(parsedTypes, rules);
+  markerTypesById = new Map(markerTypes.map(type => [type.id, type]));
   fallbackMarkerType = catalog.fallbackType;
   const select = element('marker-type');
   const permanentGroup = document.createElement('optgroup');
@@ -551,11 +537,16 @@ async function loadProfileMarkers() {
   const revision = ++profileRevision;
   clearProfileMarkers();
   if (!supabaseClient || !activeProfile || !user) return;
+  if (!markerTypesById.has(fallbackMarkerType)) {
+    profileStatus('Markerkatalog nicht verfuegbar. Datenbankschema und Verbindung pruefen.');
+    return;
+  }
   const profileId = activeProfile.id;
   const userId = user.id;
-  const { data, error } = await supabaseClient.from('hunting_markers')
+  const { data, error } = await fetchAllRows(() => supabaseClient.from('hunting_markers')
     .select('id,type_id,title,notes,latitude,longitude,created_by,created_at,expires_at')
-    .eq('profile_id', activeProfile.id).order('created_at');
+    .eq('profile_id', profileId).order('created_at').order('id'),
+  () => revision === profileRevision && activeProfile?.id === profileId && user?.id === userId);
   if (revision !== profileRevision || activeProfile?.id !== profileId || user?.id !== userId) return;
   if (error) {
     profileStatus(`Markierungen konnten nicht geladen werden: ${error.message}`);
@@ -658,10 +649,12 @@ function startPresenceUpdates() {
 }
 
 function updateHuntingMode(profile, enabled) {
+  if (!user || activeProfile?.id !== profile.id) return;
   profile.hunting_mode = enabled;
   if (activeProfile?.id === profile.id) activeProfile.hunting_mode = enabled;
   updateProfileControls();
   if (!enabled) {
+    locationConsent = null;
     const previousProfileId = sharingProfileId;
     pauseProfileLocation();
     if (previousProfileId && user) void supabaseClient.from('hunting_profile_locations').delete()
@@ -703,10 +696,11 @@ async function loadProfileLocations() {
   const freshAfter = new Date(Date.now() - 90000).toISOString();
   const profileId = activeProfile.id;
   const [{ data, error }, { data: participants, error: participantError }] = await Promise.all([
-    supabaseClient.from('hunting_profile_locations')
+    fetchAllRows(() => supabaseClient.from('hunting_profile_locations')
       .select('user_id,latitude,longitude,accuracy,updated_at')
-      .eq('profile_id', profileId).gte('updated_at', freshAfter),
-    supabaseClient.rpc('get_hunting_profile_participants', { p_profile_id: profileId })
+      .eq('profile_id', profileId).gte('updated_at', freshAfter).order('user_id'), () => revision === presenceRevision),
+    fetchAllRows(() => supabaseClient.rpc('get_hunting_profile_participants', { p_profile_id: profileId })
+      .order('participant_user_id'), () => revision === presenceRevision)
   ]);
   if (revision !== presenceRevision || !activeProfile || !user) return;
   profileLocations.clearLayers();
@@ -760,17 +754,22 @@ async function loadProfileLocations() {
 }
 
 async function startProfileLocationSharing(profile) {
+  if (activeProfile?.id !== profile.id || !canShareProfileLocation(activeProfile, user, locationConsent)) return;
+  const userId = user.id;
+  const revision = profileActivationRevision;
+  const isCurrent = () => revision === profileActivationRevision && user?.id === userId &&
+    activeProfile?.id === profile.id && sharingProfileId === profile.id && activeProfile.hunting_mode;
   if (!navigator.geolocation) {
     profileStatus('Standortfreigabe im Browser nicht verfuegbar. Revierprofile bleiben sichtbar.');
     return;
   }
   sharingProfileId = profile.id;
   const { error: clearError } = await supabaseClient.from('hunting_profile_locations').delete()
-    .eq('profile_id', profile.id).eq('user_id', user.id);
-  if (sharingProfileId !== profile.id || !activeProfile?.hunting_mode) return;
+    .eq('profile_id', profile.id).eq('user_id', userId);
+  if (!isCurrent()) return;
   if (clearError) profileStatus(`Vorherige Standortfreigabe konnte nicht entfernt werden: ${clearError.message}`);
   const updateSharedLocation = async position => {
-    if (sharingProfileId !== profile.id || !user || !activeProfile?.hunting_mode) return;
+    if (!isCurrent()) return;
     const point = { lat: position.coords.latitude, lng: position.coords.longitude };
     if (!pointInSelectedFeature(point)) {
       if (sharedLocationIsInBoundary) {
@@ -790,16 +789,19 @@ async function startProfileLocationSharing(profile) {
       accuracy: position.coords.accuracy,
       updated_at: new Date().toISOString()
     }, { onConflict: 'profile_id,user_id' });
+    if (!isCurrent()) return;
     if (error) profileStatus(`Standort konnte nicht uebermittelt werden: ${error.message}. Datenbankschema aus schema.sql pruefen.`);
     else if (profile.owner_id === user.id) void loadProfileLocations();
   };
   const requestLocation = () => {
-    if (sharingProfileId !== profile.id || locationRequestPending || !activeProfile?.hunting_mode) return;
+    if (!isCurrent() || locationRequestPending) return;
     locationRequestPending = true;
     navigator.geolocation.getCurrentPosition(position => {
+      if (!isCurrent()) return;
       locationRequestPending = false;
       void updateSharedLocation(position);
     }, error => {
+      if (!isCurrent()) return;
       locationRequestPending = false;
       if (sharingProfileId !== profile.id) return;
       if (error.code === 1 && profile.owner_id === user?.id) {
@@ -822,18 +824,31 @@ async function startProfileLocationSharing(profile) {
   locationInterval = setInterval(requestLocation, 30000);
 }
 
-async function activateProfile(profile) {
+async function activateProfile(profile, consent = false) {
+  if (!profile || !user || !supabaseClient) return;
   const revision = ++profileActivationRevision;
+  const userId = user.id;
   await stopProfileLocation();
-  if (revision !== profileActivationRevision) return;
+  if (revision !== profileActivationRevision || user?.id !== userId) return;
   const { data: modeData, error: modeError } = await supabaseClient.from('hunting_profiles')
     .select('hunting_mode').eq('id', profile.id).maybeSingle();
-  if (revision !== profileActivationRevision) return;
+  if (revision !== profileActivationRevision || user?.id !== userId) return;
   if (modeError || !modeData) {
     profileStatus(`Jagdmodus konnte nicht geladen werden: ${modeError?.message || 'Profil nicht verfuegbar'}`);
     return;
   }
   profile.hunting_mode = Boolean(modeData.hunting_mode);
+  locationConsent = consent ? { profileId: profile.id, userId } : null;
+  if (profile.owner_id !== userId && profile.hunting_mode && !consent) {
+    activeProfile = null;
+    clearProfileMarkers();
+    updateProfileControls();
+    pendingProfileId = profile.id;
+    element('profile-list').value = '';
+    element('presence-status').hidden = true;
+    if (!element('location-consent-dialog').open) element('location-consent-dialog').showModal();
+    return;
+  }
   if (profile.owner_id === user?.id) {
     profile.member_role = 'owner';
   } else {
@@ -845,32 +860,6 @@ async function activateProfile(profile) {
       return;
     }
     profile.member_role = membership.role;
-  }
-  activeProfile = null;
-  element('profile-list').value = '';
-  element('presence-status').hidden = true;
-  updateProfileControls();
-  if (!profile) {
-    clearProfileMarkers();
-    element('presence-status').hidden = true;
-    profileStatus('Du siehst dieses Revier wie ein Gast.');
-    return;
-  }
-  if (profile.owner_id === user?.id) {
-    activeProfile = profile;
-    element('profile-list').value = profile.id;
-    updateProfileControls();
-    await registerProfileBoundary(profile);
-    if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
-    await loadProfileMarkers();
-    element('presence-status').hidden = false;
-    startHuntingModeUpdates(profile);
-    if (profile.hunting_mode) {
-      startPresenceUpdates();
-      void startProfileLocationSharing(profile);
-    }
-    else element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
-    return;
   }
   activeProfile = profile;
   element('profile-list').value = profile.id;
@@ -916,16 +905,17 @@ async function loadProfiles(preferredId) {
     return;
   }
   profileStatus('Profile werden geladen ...');
-  const { data, error } = await supabaseClient.from('hunting_profiles')
+  const isCurrent = () => revision === profileRevision;
+  const { data, error } = await fetchAllRows(() => supabaseClient.from('hunting_profiles')
     .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode')
-    .eq('source_id', source.id).eq('feature_id', featureId).order('created_at');
+    .eq('source_id', source.id).eq('feature_id', featureId).order('created_at').order('id'), isCurrent);
   if (revision !== profileRevision) return;
   if (error) {
     profileStatus(`Profile nicht verfuegbar. Datenbankschema aus schema.sql einrichten. (${error.message})`);
     return;
   }
-  const { data: memberships, error: membershipError } = await supabaseClient.from('hunting_profile_members')
-    .select('profile_id,role').eq('user_id', user.id);
+  const { data: memberships, error: membershipError } = await fetchAllRows(() => supabaseClient.from('hunting_profile_members')
+    .select('profile_id,role').eq('user_id', user.id).order('profile_id'), isCurrent);
   if (revision !== profileRevision) return;
   if (membershipError) {
     profileStatus(`Mitgliedsrollen nicht verfuegbar. Datenbankschema aus schema.sql aktualisieren. (${membershipError.message})`);
@@ -935,9 +925,9 @@ async function loadProfiles(preferredId) {
   const sharedProfileIds = (data || []).filter(profile => profile.owner_id !== user.id).map(profile => profile.id);
   let ownerEmails = [];
   if (sharedProfileIds.length) {
-    const { data: emails } = await supabaseClient.rpc('get_hunting_profile_owner_emails', {
+    const { data: emails } = await fetchAllRows(() => supabaseClient.rpc('get_hunting_profile_owner_emails', {
       p_profile_ids: sharedProfileIds
-    });
+    }).order('profile_id'), isCurrent);
     if (revision !== profileRevision) return;
     ownerEmails = emails || [];
   }
@@ -972,23 +962,16 @@ async function loadProfiles(preferredId) {
   profileStatus(profiles.length ? `${profiles.length} unabhaengige(s) Revierprofil(e).` : 'Noch kein Profil fuer dieses Revier.');
   if (preferredId && !preferredProfile) profileStatus('Dieses Profil ist nicht mehr zugreifbar.');
   updateProfileControls();
-  if (activeProfile) await registerProfileBoundary(activeProfile);
   if (revision !== profileRevision) return;
-  await loadProfileMarkers();
-  if (activeProfile?.owner_id === user.id) {
-    element('presence-status').hidden = false;
-    startHuntingModeUpdates(activeProfile);
-    if (activeProfile.hunting_mode) {
-      startPresenceUpdates();
-      void startProfileLocationSharing(activeProfile);
-    }
-    else element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
-  }
-  if (preferredProfile && preferredProfile.owner_id !== user?.id) await chooseProfile(preferredProfile);
+  const ownProfile = activeProfile;
+  activeProfile = null;
+  if (ownProfile) await activateProfile(ownProfile);
+  else if (preferredProfile && preferredProfile.owner_id !== user?.id) await chooseProfile(preferredProfile);
 }
 
 function clearSelection() {
   profileActivationRevision += 1;
+  locationConsent = null;
   void stopProfileLocation();
   pendingProfileId = null;
   if (element('location-consent-dialog').open) element('location-consent-dialog').close();
@@ -1042,37 +1025,6 @@ function selectFeature(feature, button, preferredProfileId) {
   element('profile-section').hidden = !user;
   updateSavedProfileSelection();
   if (user) return loadProfiles(preferredProfileId);
-}
-
-function pointOnSegment(point, start, end) {
-  const cross = (point.lng - start[0]) * (end[1] - start[1]) - (point.lat - start[1]) * (end[0] - start[0]);
-  if (Math.abs(cross) > 1e-10) return false;
-  return point.lng >= Math.min(start[0], end[0]) - 1e-10 && point.lng <= Math.max(start[0], end[0]) + 1e-10 &&
-    point.lat >= Math.min(start[1], end[1]) - 1e-10 && point.lat <= Math.max(start[1], end[1]) + 1e-10;
-}
-
-function pointInRing(point, ring) {
-  let inside = false;
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
-    const start = ring[previous];
-    const end = ring[index];
-    if (pointOnSegment(point, start, end)) return true;
-    const crosses = (start[1] > point.lat) !== (end[1] > point.lat) &&
-      point.lng < (end[0] - start[0]) * (point.lat - start[1]) / (end[1] - start[1]) + start[0];
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
-function pointInFeature(point, feature) {
-  const geometry = feature?.geometry;
-  if (geometry?.type === 'Polygon') {
-    return pointInRing(point, geometry.coordinates[0]) && !geometry.coordinates.slice(1).some(ring => pointInRing(point, ring));
-  }
-  if (geometry?.type === 'MultiPolygon') {
-    return geometry.coordinates.some(polygon => pointInRing(point, polygon[0]) && !polygon.slice(1).some(ring => pointInRing(point, ring)));
-  }
-  return false;
 }
 
 function pointInSelectedFeature(point) {
@@ -1141,8 +1093,12 @@ function boundaryCacheRequest(source) {
 
 async function loadImportedBoundaries(source) {
   if (!user || !supabaseClient) throw new Error('Anmeldung erforderlich, um private Importe zu laden.');
-  const { data, error } = await supabaseClient.from('hunting_profiles')
-    .select('feature_id,district_name,boundary_geojson').eq('source_id', source.id);
+  const userId = user.id;
+  const revision = boundaryLoadRevision;
+  const { data, error } = await fetchAllRows(() => supabaseClient.from('hunting_profiles')
+    .select('feature_id,district_name,boundary_geojson').eq('source_id', source.id).order('id'),
+  () => user?.id === userId && revision === boundaryLoadRevision);
+  if (user?.id !== userId || revision !== boundaryLoadRevision) throw new Error('Revierauswahl hat sich geaendert.');
   if (error) throw new Error(error.message);
   return boundaries({
     type: 'FeatureCollection',
@@ -1386,6 +1342,8 @@ element('marker-icon-size').addEventListener('change', event => {
 element('hunting-mode').addEventListener('change', async event => {
   const profile = activeProfile;
   if (!profile || !canEditProfile(profile) || !supabaseClient) return;
+  const userId = user.id;
+  const revision = profileActivationRevision;
   const enabled = event.currentTarget.checked;
   huntingModePending = true;
   updateProfileControls();
@@ -1394,6 +1352,10 @@ element('hunting-mode').addEventListener('change', async event => {
     p_enabled: enabled
   });
   huntingModePending = false;
+  if (revision !== profileActivationRevision || activeProfile?.id !== profile.id || user?.id !== userId) {
+    updateProfileControls();
+    return;
+  }
   if (error) {
     updateProfileControls();
     profileStatus(`Jagdmodus konnte nicht geaendert werden: ${error.message}. Datenbankschema aus schema.sql aktualisieren.`);
@@ -1404,6 +1366,7 @@ element('hunting-mode').addEventListener('change', async event => {
 
 async function chooseProfile(profile) {
   const revision = ++profileActivationRevision;
+  locationConsent = null;
   await stopProfileLocation();
   if (revision !== profileActivationRevision) return;
   activeProfile = null;
@@ -1416,27 +1379,17 @@ async function chooseProfile(profile) {
     profileStatus('Du siehst dieses Revier wie ein Gast.');
     return;
   }
-  if (profile.owner_id === user?.id) {
-    await activateProfile(profile);
-    return;
-  }
-  if (!profile.hunting_mode) {
-    await activateProfile(profile);
-    return;
-  }
-  element('presence-status').hidden = true;
-  pendingProfileId = profile.id;
-  element('profile-list').value = '';
-  element('location-consent-dialog').showModal();
+  await activateProfile(profile);
 }
 element('accept-location').addEventListener('click', () => {
   const profile = profiles.find(candidate => candidate.id === pendingProfileId);
   pendingProfileId = null;
   element('location-consent-dialog').close();
-  if (profile) void activateProfile(profile);
+  if (profile) void activateProfile(profile, true);
 });
 function declineProfileLocation() {
   profileActivationRevision += 1;
+  locationConsent = null;
   void stopProfileLocation();
   pendingProfileId = null;
   element('location-consent-dialog').close();
@@ -1616,21 +1569,15 @@ element('download').addEventListener('click', async () => {
   try {
     const { createJwdExport } = await import('./jwd-import.js');
     if (!isCurrent()) return;
-    const markers = [];
+    let markers = [];
     if (includeMarkers) {
       if (!supabaseClient) throw new Error('Markierungen sind nicht verfuegbar.');
-      const pageSize = 1000;
-      for (let offset = 0; ; offset += pageSize) {
-        const { data, error } = await supabaseClient.from('hunting_markers')
-          .select('type_id,title,notes,latitude,longitude,expires_at')
-          .eq('profile_id', profile.id).is('expires_at', null).order('id')
-          .range(offset, offset + pageSize - 1);
-        if (!isCurrent()) return;
-        if (error) throw new Error(error.message);
-        if (!data) throw new Error('Markierungen konnten nicht geladen werden.');
-        markers.push(...data);
-        if (data.length < pageSize) break;
-      }
+      const { data, error } = await fetchAllRows(() => supabaseClient.from('hunting_markers')
+        .select('type_id,title,notes,latitude,longitude,expires_at')
+        .eq('profile_id', profile.id).is('expires_at', null).order('id'), isCurrent);
+      if (!isCurrent()) return;
+      if (error) throw new Error(error.message);
+      markers = data;
     }
     const exported = createJwdExport(profile?.district_name || featureName(feature, source),
       feature.geometry, markers, markerTypes, includeMarkers);
@@ -1676,11 +1623,26 @@ async function applySession(session) {
   if (user && (!verified || verified.id !== user.id)) {
     profileActivationRevision += 1;
     await stopProfileLocation();
+    if (revision !== authRevision) return;
+    locationConsent = null;
+    pendingProfileId = null;
+    if (element('location-consent-dialog').open) element('location-consent-dialog').close();
+    if (currentSource()?.type === 'profile-imports') {
+      boundaryLoadRevision += 1;
+      controller?.abort();
+      controller = null;
+      clearSelection();
+      features = [];
+      boundaryUpdatedAt = null;
+      renderResults();
+      status('Anmelden, um private Revierimporte zu laden.');
+    }
   }
   const previousId = user?.id;
   user = verified;
   if (verified && previousId !== verified.id) {
     const { error } = await supabaseClient.rpc('accept_hunting_profile_invitations');
+    if (revision !== authRevision) return;
     if (error) profileStatus(`Einladungen konnten nicht angenommen werden: ${error.message}`);
   }
   element('search-fields').disabled = false;
@@ -1840,12 +1802,12 @@ element('code-form').addEventListener('submit', async event => {
 });
 
 if (config.supabaseUrl && config.supabasePublishableKey && window.supabase) {
-  try { await loadMarkerTypes(); }
-  catch (error) { profileStatus(`Objekttyp-Konfiguration konnte nicht geladen werden: ${error.message}`); }
   supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
     auth: { flowType: 'pkce', persistSession: true }
   });
   auth = supabaseClient.auth;
+  try { await loadMarkerTypes(); }
+  catch (error) { profileStatus(`Objekttyp-Konfiguration konnte nicht geladen werden: ${error.message}`); }
   auth.onAuthStateChange((_event, session) => { setTimeout(() => applySession(session), 0); });
   const callbackUrl = new URL(location.href);
   const tokenHash = callbackUrl.searchParams.get('token_hash');

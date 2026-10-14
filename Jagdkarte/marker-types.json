@@ -93,7 +93,6 @@
     {
       "id": "anschuss",
       "label": "Anschuss",
-      "temporary": true,
       "iconUrl": "./markers/anschuss.svg",
       "iconSize": [40, 48],
       "iconAnchor": [20, 46],
@@ -102,7 +101,6 @@
     {
       "id": "wildsichtung",
       "label": "Wildsichtung",
-      "temporary": true,
       "iconUrl": "./markers/wildsichtung.svg",
       "iconSize": [40, 48],
       "iconAnchor": [20, 46],
@@ -111,9 +109,6 @@
     {
       "id": "standplatz",
       "label": "Standplatz",
-      "temporary": true,
-      "editorsOnly": true,
-      "requiresCurrentLocation": false,
       "iconUrl": "./markers/standplatz.svg",
       "iconSize": [40, 48],
       "iconAnchor": [20, 46],
