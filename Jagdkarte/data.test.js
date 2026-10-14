@@ -1,5 +1,5 @@
 import { loadBoundaries } from './data.js';
-import { mapJwdFacilities, parseJwdImport } from './jwd-import.js';
+import { findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } from './jwd-import.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -63,6 +63,27 @@ export async function runDataTests() {
   assert(mappedFacilities[1].typeId === 'sonstiges' && mappedFacilities[1].notes.includes('Unbekannt'),
     'JWD import did not preserve an unknown marker type with the fallback icon type.');
   passed.push('JWD maps known types and preserves unknown types with the fallback');
+
+  const matchingProfiles = matchingEditableProfiles([
+    { id: 'owner', district_name: ' Temmels ', owner_id: 'user-1', member_role: 'owner' },
+    { id: 'editor', district_name: 'TEMMELS', owner_id: 'user-2', member_role: 'editor' },
+    { id: 'guest', district_name: 'Temmels', owner_id: 'user-3', member_role: 'guest' },
+    { id: 'other', district_name: 'Trier', owner_id: 'user-1', member_role: 'owner' }
+  ], 'temmels', 'user-1');
+  assert(matchingProfiles.map(profile => profile.id).join(',') === 'owner,editor',
+    'JWD import did not restrict name matches to owner/editor profiles.');
+  passed.push('JWD matches same-name owner and editor profiles only');
+
+  const incomingFacilities = [
+    { typeId: 'bock', title: 'Bock 1', latitude: 49.67, longitude: 6.47 },
+    { typeId: 'hochsitz', title: 'Neue Kanzel', latitude: 49.68, longitude: 6.48 }
+  ];
+  const merge = findJwdFacilityAdditions(incomingFacilities, [
+    { type_id: 'bock', title: 'Bock 1', latitude: 49.6700001, longitude: 6.4700001 }
+  ]);
+  assert(merge.additions.length === 1 && merge.additions[0].title === 'Neue Kanzel' && merge.duplicateCount === 1,
+    'JWD merge did not ignore existing facilities and retain only additions.');
+  passed.push('JWD repeated imports retain only new facilities');
 
   let invalidJwdRejected = false;
   try {

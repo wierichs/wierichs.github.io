@@ -75,6 +75,41 @@ function normalizeType(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('de-DE');
 }
 
+function normalizeName(value) {
+  return String(value || '').normalize('NFKC').trim().toLocaleLowerCase('de-DE');
+}
+
+export function matchingEditableProfiles(profiles, name, userId) {
+  const normalizedName = normalizeName(name);
+  return profiles.filter(profile => normalizeName(profile.district_name) === normalizedName &&
+    (profile.owner_id === userId || profile.member_role === 'editor'));
+}
+
+function facilityKey(facility) {
+  return [
+    facility.typeId || facility.type_id,
+    normalizeName(facility.title),
+    Math.round(Number(facility.latitude) * 1e6),
+    Math.round(Number(facility.longitude) * 1e6)
+  ].join('|');
+}
+
+export function findJwdFacilityAdditions(incoming, existing) {
+  const existingKeys = new Set(existing.map(facilityKey));
+  const additions = [];
+  let duplicateCount = 0;
+  for (const facility of incoming) {
+    const key = facilityKey(facility);
+    if (existingKeys.has(key)) {
+      duplicateCount += 1;
+    } else {
+      existingKeys.add(key);
+      additions.push(facility);
+    }
+  }
+  return { additions, duplicateCount };
+}
+
 export function mapJwdFacilities(facilities, markerTypes, fallbackType = 'sonstiges') {
   const typesByName = new Map();
   markerTypes.forEach(type => {

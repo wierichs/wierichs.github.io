@@ -93,7 +93,7 @@ function showMapStatus(message, type = 'info') {
 
 element('close-map-status').addEventListener('click', hideMapStatus);
 
-function setDistrictTab(name, focus = false) {
+function setDistrictTab(name, focus = false, refreshSaved = true) {
   for (const tabName of ['search', 'saved']) {
     const active = name === tabName;
     const tab = element(`${tabName}-tab`);
@@ -102,7 +102,7 @@ function setDistrictTab(name, focus = false) {
     element(`${tabName}-view`).hidden = !active;
     if (active && focus) tab.focus();
   }
-  if (name === 'saved') void loadSavedProfiles();
+  if (name === 'saved' && refreshSaved) void loadSavedProfiles();
 }
 
 element('search-tab').addEventListener('click', () => setDistrictTab('search'));
@@ -161,7 +161,7 @@ async function loadSavedProfiles() {
     savedProfiles = [];
     renderSavedProfiles();
     element('saved-status').textContent = 'Anmelden, um gespeicherte Reviere zu sehen.';
-    return;
+    return false;
   }
   const userId = user.id;
   element('saved-view').setAttribute('aria-busy', 'true');
@@ -169,11 +169,11 @@ async function loadSavedProfiles() {
   try {
     const { data, error } = await supabaseClient.from('hunting_profiles')
       .select('id,source_id,feature_id,district_name,owner_id,created_at,hunting_mode').order('district_name');
-    if (revision !== savedProfilesRevision || user?.id !== userId) return;
+    if (revision !== savedProfilesRevision || user?.id !== userId) return false;
     if (error) throw new Error(error.message);
     const { data: memberships, error: membershipError } = await supabaseClient.from('hunting_profile_members')
       .select('profile_id,role').eq('user_id', userId);
-    if (revision !== savedProfilesRevision || user?.id !== userId) return;
+    if (revision !== savedProfilesRevision || user?.id !== userId) return false;
     if (membershipError) throw new Error(membershipError.message);
     const memberRoles = new Map((memberships || []).map(member => [member.profile_id, member.role]));
     const sharedProfileIds = (data || []).filter(profile => profile.owner_id !== userId).map(profile => profile.id);
@@ -183,7 +183,7 @@ async function loadSavedProfiles() {
       const { data: emails, error: emailError } = await supabaseClient.rpc('get_hunting_profile_owner_emails', {
         p_profile_ids: sharedProfileIds
       });
-      if (revision !== savedProfilesRevision || user?.id !== userId) return;
+      if (revision !== savedProfilesRevision || user?.id !== userId) return false;
       if (emailError) ownerEmailError = emailError;
       else ownerEmails = emails || [];
     }
@@ -198,10 +198,12 @@ async function loadSavedProfiles() {
       ? `Reviere geladen, Owner-E-Mails noch nicht verfuegbar. Datenbankschema aktualisieren. (${ownerEmailError.message})`
       : savedProfiles.length
         ? `${savedProfiles.length} gespeicherte(s) Revierprofil(e).` : 'Noch keine eigenen oder freigegebenen Reviere.';
+    return true;
   } catch (error) {
     if (revision === savedProfilesRevision && user?.id === userId) {
       element('saved-status').textContent = `Gespeicherte Reviere konnten nicht geladen werden: ${error.message}`;
     }
+    return false;
   } finally {
     if (revision === savedProfilesRevision) {
       element('saved-view').setAttribute('aria-busy', 'false');
@@ -251,13 +253,18 @@ async function importJwdProfile(file) {
   if (!user || !supabaseClient || profileImportPending) return;
   const userId = user.id;
   let createdProfileId = null;
+  let createdNewProfile = false;
   let importedFeatureId = null;
+  let facilitiesToInsert = [];
+  let duplicateCount = 0;
+  let outsideTargetCount = 0;
+  let existingProfile = null;
   profileImportPending = true;
   element('import-profile').disabled = true;
   element('saved-status').textContent = 'Revierdatei wird geprueft ...';
   try {
     if (file.size > 10 * 1024 * 1024) throw new Error('Die Datei ist groesser als 10 MB.');
-    const { mapJwdFacilities, parseJwdImport } = await import('./jwd-import.js');
+    const { findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } = await import('./jwd-import.js');
     const imported = parseJwdImport(await file.text());
     if (imported.name.length > 200) throw new Error('Der Reviername ist laenger als 200 Zeichen.');
     if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
@@ -278,31 +285,70 @@ async function importJwdProfile(file) {
       untitledCount ? `${untitledCount} Einrichtung(en) ohne Namen erhalten einen automatisch erzeugten Namen.` : '',
       unknownTypeCount ? `${unknownTypeCount} unbekannte(r) Markertyp(en) erhalten das Sonstige-Icon; der Originaltyp bleibt in den Notizen erhalten.` : ''
     ].filter(Boolean);
+    if (!await loadSavedProfiles()) throw new Error('Gespeicherte Revierprofile konnten nicht aktualisiert werden.');
+    if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
+    const matchingProfiles = matchingEditableProfiles(savedProfiles, imported.name, userId);
+    if (matchingProfiles.length > 1) {
+      throw new Error(`Es gibt mehrere eigene oder bearbeitbare Reviere namens "${imported.name}". Der Import wurde nicht zugeordnet.`);
+    }
+    existingProfile = matchingProfiles[0] || null;
+    facilitiesToInsert = mappedFacilities;
+    if (existingProfile) {
+      const { data: profileData, error: profileError } = await supabaseClient.from('hunting_profiles')
+        .select('boundary_geojson').eq('id', existingProfile.id).maybeSingle();
+      if (profileError || !profileData) throw new Error(`Vorhandenes Revierprofil konnte nicht geladen werden: ${profileError?.message || 'Profil nicht verfuegbar'}`);
+      const { data: existingMarkers, error: markerLoadError } = await supabaseClient.from('hunting_markers')
+        .select('type_id,title,latitude,longitude').eq('profile_id', existingProfile.id);
+      if (markerLoadError) throw new Error(`Vorhandene Markierungen konnten nicht geladen werden: ${markerLoadError.message}`);
+      const additions = findJwdFacilityAdditions(mappedFacilities, existingMarkers || []);
+      duplicateCount = additions.duplicateCount;
+      const targetGeometry = profileData.boundary_geojson || imported.geometry;
+      const targetFeature = { type: 'Feature', properties: { id: 'target', name: imported.name }, geometry: targetGeometry };
+      facilitiesToInsert = additions.additions.filter(marker => {
+        const inside = pointInFeature({ lat: marker.latitude, lng: marker.longitude }, targetFeature);
+        if (!inside) outsideTargetCount += 1;
+        return inside;
+      });
+      if (!facilitiesToInsert.length) {
+        setDistrictTab('saved', false, false);
+        await loadSavedProfiles();
+        element('saved-status').textContent = duplicateCount
+          ? `Keine neuen Ergaenzungen fuer "${existingProfile.district_name}" gefunden; ${duplicateCount} vorhandene Markierung(en) uebersprungen.`
+          : `Keine neuen Markierungen innerhalb der bestehenden Reviergrenze fuer "${existingProfile.district_name}" gefunden.`;
+        return;
+      }
+    }
+    if (outsideTargetCount) warnings.push(`${outsideTargetCount} neue Markierung(en) ausserhalb der bestehenden Reviergrenze werden nicht uebernommen.`);
     const summary = [
       `"${imported.name}" importieren?`,
-      `${mappedFacilities.length} Einrichtungen und ${pacifiedCount} befriedete(r) Bereich(e).`,
+      existingProfile
+        ? `${facilitiesToInsert.length} neue Markierung(en) fuer das vorhandene Profil; ${duplicateCount} Duplikat(e) werden uebersprungen. Grenze und Profil bleiben unveraendert.`
+        : `${mappedFacilities.length} Einrichtungen und ${pacifiedCount} befriedete(r) Bereich(e).`,
       ...warnings
     ].join('\n');
     if (!window.confirm(summary)) return;
 
-    const featureId = `jwd-${crypto.randomUUID()}`;
-    importedFeatureId = featureId;
-    const { data, error } = await supabaseClient.rpc('create_hunting_profile', {
-      p_source_id: 'user-imports', p_feature_id: featureId, p_district_name: imported.name
-    });
-    if (error) throw new Error(error.message);
-    createdProfileId = data?.id || data?.[0]?.id;
-    if (!createdProfileId) throw new Error('Das Revierprofil wurde ohne Profil-ID angelegt.');
+    if (existingProfile) {
+      createdProfileId = existingProfile.id;
+    } else {
+      const featureId = `jwd-${crypto.randomUUID()}`;
+      importedFeatureId = featureId;
+      const { data, error } = await supabaseClient.rpc('create_hunting_profile', {
+        p_source_id: 'user-imports', p_feature_id: featureId, p_district_name: imported.name
+      });
+      if (error) throw new Error(error.message);
+      createdProfileId = data?.id || data?.[0]?.id;
+      if (!createdProfileId) throw new Error('Das Revierprofil wurde ohne Profil-ID angelegt.');
+      createdNewProfile = true;
+      const { error: boundaryError } = await supabaseClient.rpc('set_hunting_profile_boundary', {
+        p_profile_id: createdProfileId, p_geometry: imported.geometry
+      });
+      if (boundaryError) throw new Error(boundaryError.message);
+    }
     if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
 
-    const { error: boundaryError } = await supabaseClient.rpc('set_hunting_profile_boundary', {
-      p_profile_id: createdProfileId, p_geometry: imported.geometry
-    });
-    if (boundaryError) throw new Error(boundaryError.message);
-    if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
-
-    if (mappedFacilities.length) {
-      const { error: markerError } = await supabaseClient.from('hunting_markers').insert(mappedFacilities.map(marker => ({
+    if (facilitiesToInsert.length) {
+      const { error: markerError } = await supabaseClient.from('hunting_markers').insert(facilitiesToInsert.map(marker => ({
         profile_id: createdProfileId,
         type_id: marker.typeId,
         title: marker.title,
@@ -315,11 +361,14 @@ async function importJwdProfile(file) {
     }
   } catch (error) {
     let cleanupMessage = '';
-    if (createdProfileId) {
+    if (createdNewProfile && createdProfileId) {
       const { error: cleanupError } = await supabaseClient.from('hunting_profiles').delete().eq('id', createdProfileId);
       if (cleanupError) cleanupMessage = ` Das unvollstaendige Profil konnte nicht automatisch entfernt werden: ${cleanupError.message}`;
     }
-    if (user?.id === userId) element('saved-status').textContent = `Import fehlgeschlagen: ${error.message}.${cleanupMessage}`;
+    if (user?.id === userId) {
+      setDistrictTab('saved', false, false);
+      element('saved-status').textContent = `Import fehlgeschlagen: ${error.message}.${cleanupMessage}`;
+    }
     return;
   } finally {
     profileImportPending = false;
@@ -327,6 +376,12 @@ async function importJwdProfile(file) {
   }
 
   if (user?.id !== userId) return;
+  if (existingProfile) {
+    setDistrictTab('saved', false, false);
+    await loadSavedProfiles();
+    element('saved-status').textContent = `${facilitiesToInsert.length} neue Ergaenzung(en) fuer "${existingProfile.district_name}" uebernommen; ${duplicateCount} Duplikat(e) uebersprungen. Grenze und bestehende Markierungen blieben unveraendert.`;
+    return;
+  }
   element('source').value = 'user-imports';
   saveSelection(null);
   await loadSelectedSource();
