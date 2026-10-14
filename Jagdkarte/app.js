@@ -444,9 +444,9 @@ async function loadOwnDisplayName() {
 }
 
 function resetMarkerPlacement() {
+  if (placementMode) hideMapStatus();
   placementMode = false;
   markerCoordinates = null;
-  element('marker-instruction').hidden = true;
   element('marker-form').hidden = true;
   element('add-marker').setAttribute('aria-pressed', 'false');
   element('marker-title').value = '';
@@ -1487,10 +1487,11 @@ element('invite-form').addEventListener('submit', async event => {
 });
 element('add-marker').addEventListener('click', () => {
   if (!activeProfile || !user || markerPending) return;
+  if (placementMode) hideMapStatus();
+  else showMapStatus('Karte antippen, um die Position festzulegen.');
   placementMode = !placementMode;
   markerCoordinates = null;
   element('marker-form').hidden = true;
-  element('marker-instruction').hidden = !placementMode;
   element('add-marker').setAttribute('aria-pressed', String(placementMode));
 });
 element('cancel-marker').addEventListener('click', resetMarkerPlacement);
@@ -1498,11 +1499,12 @@ map.on('click', event => {
   if (placementMode) {
     if (!pointInSelectedFeature(event.latlng)) {
       profileStatus('Markierungen muessen innerhalb des ausgewaehlten Jagdbezirks liegen.');
+      showMapStatus('Bitte einen Punkt innerhalb der Reviergrenze waehlen.');
       return;
     }
+    hideMapStatus();
     markerCoordinates = event.latlng;
     placementMode = false;
-    element('marker-instruction').hidden = true;
     element('marker-coordinates').textContent = `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`;
     element('marker-form').hidden = false;
     element('add-marker').setAttribute('aria-pressed', 'false');

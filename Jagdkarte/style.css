@@ -86,7 +86,6 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #display-name-status { margin: 6px 0; }
 .profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 #invite-form, #marker-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-#marker-instruction { position: absolute; top: 70px; right: 16px; z-index: 500; max-width: min(360px, calc(100% - 32px)); padding: 12px 14px; background: white; box-shadow: 0 2px 8px #20342826; font-size: 13px; }
 .profile-marker-popup { min-width: 150px; }
 .profile-marker-popup strong, .profile-marker-popup span { display: block; overflow-wrap: anywhere; }
 .profile-marker-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
