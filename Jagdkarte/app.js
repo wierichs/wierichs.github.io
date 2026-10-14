@@ -1560,6 +1560,8 @@ async function applySession(session) {
   if (user && previousId !== user.id) void loadOwnDisplayName();
   else if (element('display-name-dialog').open) element('display-name-dialog').close();
   element('account-button').querySelector('span').textContent = user ? 'Abmelden' : 'Anmelden';
+  element('import-profile').hidden = !user;
+  element('import-profile').disabled = !user || profileImportPending;
   if (!user) {
     savedProfilesRevision += 1;
     savedOpenRevision += 1;
