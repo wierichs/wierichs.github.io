@@ -304,6 +304,7 @@ function updateProfileControls() {
   const isOwner = Boolean(user && activeProfile?.owner_id === user.id);
   element('delete-profile').hidden = !isOwner;
   element('delete-profile').disabled = profileDeletePending;
+  element('profile-list').disabled = profileDeletePending;
   element('hunting-mode-control').hidden = !canEdit;
   element('owner-location-notice').hidden = !canEdit;
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
@@ -1236,12 +1237,14 @@ element('invite-toggle').addEventListener('click', () => {
 async function deleteActiveProfile() {
   const profile = activeProfile;
   const userId = user?.id;
-  if (!profile || !userId || profile.owner_id !== userId || !supabaseClient || profileDeletePending) return;
+  const selectedProfileId = element('profile-list').value;
+  if (!profile || !userId || !selectedProfileId || profile.id !== selectedProfileId ||
+      profile.owner_id !== userId || !supabaseClient || profileDeletePending) return;
   if (!window.confirm(`Dein Revierprofil "${profile.district_name}" loeschen? Das Profil anderer Owner bleibt bestehen.`)) return;
   profileDeletePending = true;
   updateProfileControls();
   profileStatus('Eigenes Revierprofil wird geloescht ...');
-  const { data, error } = await supabaseClient.from('hunting_profiles').delete().eq('id', profile.id).select('id');
+  const { data, error } = await supabaseClient.from('hunting_profiles').delete().eq('id', selectedProfileId).select('id');
   profileDeletePending = false;
   if (user?.id !== userId) return;
   if (error || !data?.some(deleted => deleted.id === profile.id)) {
