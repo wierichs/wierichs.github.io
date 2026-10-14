@@ -275,9 +275,12 @@ begin
   if p_type_id is null or p_type_id not in ('anschuss', 'wildsichtung', 'standplatz') then
     raise exception 'Ungueltige temporaere Meldungsart';
   end if;
-  if p_latitude is null or p_longitude is null or p_user_latitude is null or p_user_longitude is null
-    or not (p_latitude between -90 and 90 and p_longitude between -180 and 180
-      and p_user_latitude between -90 and 90 and p_user_longitude between -180 and 180) then
+  if p_latitude is null or p_longitude is null
+    or not (p_latitude between -90 and 90 and p_longitude between -180 and 180) then
+    raise exception 'Ungueltige Koordinaten';
+  end if;
+  if p_type_id <> 'standplatz' and (p_user_latitude is null or p_user_longitude is null
+    or not (p_user_latitude between -90 and 90 and p_user_longitude between -180 and 180)) then
     raise exception 'Ungueltige Koordinaten';
   end if;
   select boundary_geojson into district_geojson from public.hunting_profiles where id = p_profile_id;
@@ -285,7 +288,7 @@ begin
     raise exception 'Der Owner muss dieses Profil einmal oeffnen, um die Reviergrenze zu hinterlegen';
   end if;
   district_geometry := extensions.st_setsrid(extensions.st_geomfromgeojson(district_geojson::text), 4326);
-  if not extensions.st_covers(district_geometry,
+  if p_type_id <> 'standplatz' and not extensions.st_covers(district_geometry,
       extensions.st_setsrid(extensions.st_makepoint(p_user_longitude, p_user_latitude), 4326)) then
     raise exception 'Dein aktueller Standort liegt ausserhalb des Reviers';
   end if;

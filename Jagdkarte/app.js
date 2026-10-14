@@ -1527,19 +1527,23 @@ element('marker-form').addEventListener('submit', async event => {
   try {
     let result;
     if (type.temporary) {
-      if (!navigator.geolocation) throw new Error('Standortbestimmung nicht verfuegbar.');
-      profileStatus('Aktueller Standort wird geprueft ...');
-      const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve,
-        error => reject(new Error(error.code === 1 ? 'Standortzugriff nicht erlaubt.' : 'Standort konnte nicht bestimmt werden.')),
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }));
-      if (activeProfile?.id !== profileId || user?.id !== userId || selected !== feature) return;
-      if (!pointInSelectedFeature({ lat: position.coords.latitude, lng: position.coords.longitude })) {
-        throw new Error('Dein aktueller Standort liegt ausserhalb des Reviers.');
+      let userCoordinates = null;
+      if (type.requiresCurrentLocation !== false) {
+        if (!navigator.geolocation) throw new Error('Standortbestimmung nicht verfuegbar.');
+        profileStatus('Aktueller Standort wird geprueft ...');
+        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve,
+          error => reject(new Error(error.code === 1 ? 'Standortzugriff nicht erlaubt.' : 'Standort konnte nicht bestimmt werden.')),
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }));
+        if (activeProfile?.id !== profileId || user?.id !== userId || selected !== feature) return;
+        userCoordinates = { lat: position.coords.latitude, lng: position.coords.longitude };
+        if (!pointInSelectedFeature(userCoordinates)) {
+          throw new Error('Dein aktueller Standort liegt ausserhalb des Reviers.');
+        }
       }
       result = await supabaseClient.rpc('create_temporary_hunting_marker', {
         p_profile_id: profileId, p_type_id: type.id, p_title: title, p_notes: notes,
         p_latitude: coordinates.lat, p_longitude: coordinates.lng,
-        p_user_latitude: position.coords.latitude, p_user_longitude: position.coords.longitude
+        p_user_latitude: userCoordinates?.lat ?? null, p_user_longitude: userCoordinates?.lng ?? null
       });
     } else {
       result = await supabaseClient.from('hunting_markers').insert({

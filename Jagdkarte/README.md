@@ -92,8 +92,10 @@ passwordless sign-in/registration link, and the invited user receives that role
 after verifying the same address. Bearbeiter can manage boundaries, invitations,
 the Jagdmodus, and permanent markers like the owner, but cannot delete the
 profile. Only the owner can delete it. All members can create temporary
-**Anschuss**, **Wildsichtung**, and **Standplatz** markers while their current
-browser-reported location is inside the district. Members can delete their own temporary markers;
+**Anschuss** and **Wildsichtung** markers while their current browser-reported
+location is inside the district. **Standplatz** markers can be planned without
+current-location verification, but their target must remain inside the district.
+Members can delete their own temporary markers;
 owners and Bearbeiter can delete any marker.
 Each signed-in user can click their email address in the header to set an
 optional **Anzeigename** for shared-revier participants. Only members of a
@@ -135,13 +137,14 @@ Temporary markers expire 48 hours after creation according to the database clock
 RLS immediately hides expired rows; a pg_cron job deletes them every minute even
 when nobody has the app open. Open maps remove each marker at its expiry time and
 refresh profile markers every 30 seconds (except while a marker popup is open).
-Creating a temporary marker always requests a fresh GPS fix, independent of the
-periodic location-sharing fix. The RPC checks membership, the submitted current
-position, and the marker position against the boundary stored by the owner.
-These current coordinates are used for the check, not stored as an additional
-location-sharing entry. Browser geolocation can be spoofed and is not proof of
-physical presence. An owner can manage the stored boundary, so this is a private
-profile constraint, not verification against an independent official boundary.
+Creating an Anschuss or Wildsichtung always requests a fresh GPS fix, independent
+of the periodic location-sharing fix. The RPC checks membership, the submitted
+current position, and the marker position against the boundary stored by the
+owner. These current coordinates are used for the check, not stored as an
+additional location-sharing entry. Browser geolocation can be spoofed and is not
+proof of physical presence. An owner can manage the stored boundary, so this is
+a private profile constraint, not verification against an independent official
+boundary. Standplatz creation still checks membership and the target position.
 
 After adding or changing temporary marker types, rerun `schema.sql` in Supabase
 so its RPC and row-level security allow-list matches the catalog. For existing
