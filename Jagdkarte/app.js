@@ -1,4 +1,5 @@
 import { boundaries, loadBoundaries, featureName } from './data.js';
+import { mapJwdFacilities, parseJwdImport } from './jwd-import.js';
 
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
@@ -34,6 +35,7 @@ let savedProfiles = [];
 let savedProfilesRevision = 0;
 let savedOpenRevision = 0;
 let savedProfilePending = false;
+let profileImportPending = false;
 let profileDeletePending = false;
 let activeProfile = null;
 let placementMode = false;
@@ -114,6 +116,12 @@ element('district-tabs').addEventListener('keydown', event => {
   setDistrictTab(name, true);
 });
 element('refresh-saved').addEventListener('click', () => void loadSavedProfiles());
+element('import-profile').addEventListener('click', () => element('import-profile-file').click());
+element('import-profile-file').addEventListener('change', event => {
+  const file = event.currentTarget.files?.[0];
+  event.currentTarget.value = '';
+  if (file) void importJwdProfile(file);
+});
 
 function updateSavedProfileSelection() {
   for (const button of element('saved-profiles').querySelectorAll('button')) {
@@ -240,6 +248,99 @@ async function openSavedProfile(profile) {
   }
 }
 
+async function importJwdProfile(file) {
+  if (!user || !supabaseClient || profileImportPending) return;
+  const userId = user.id;
+  let createdProfileId = null;
+  let importedFeatureId = null;
+  profileImportPending = true;
+  element('import-profile').disabled = true;
+  element('saved-status').textContent = 'Revierdatei wird geprueft ...';
+  try {
+    if (file.size > 10 * 1024 * 1024) throw new Error('Die Datei ist groesser als 10 MB.');
+    const imported = parseJwdImport(await file.text());
+    if (imported.name.length > 200) throw new Error('Der Reviername ist laenger als 200 Zeichen.');
+    if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
+    if (!markerTypesById.has(fallbackMarkerType)) throw new Error('Der Markerkatalog ist noch nicht verfuegbar.');
+    const mappedFacilities = mapJwdFacilities(imported.facilities, markerTypes, fallbackMarkerType);
+    if (mappedFacilities.some(marker => marker.title.length > 80 || marker.notes.length > 300)) {
+      throw new Error('Ein Einrichtungsname oder Importvermerk ueberschreitet die erlaubte Laenge.');
+    }
+    const previewFeature = { type: 'Feature', properties: { id: 'preview', name: imported.name }, geometry: imported.geometry };
+    const outsideCount = mappedFacilities.filter(marker => !pointInFeature({ lat: marker.latitude, lng: marker.longitude }, previewFeature)).length;
+    const untitledCount = imported.facilities.filter(facility => !facility.title).length;
+    const unknownTypeCount = mappedFacilities.filter(marker => marker.notes.startsWith('Importierter Originaltyp:')).length;
+    const pacifiedCount = imported.geometry.type === 'Polygon'
+      ? imported.geometry.coordinates.length - 1
+      : imported.geometry.coordinates.reduce((count, polygon) => count + polygon.length - 1, 0);
+    const warnings = [
+      outsideCount ? `${outsideCount} Markierung(en) liegen ausserhalb der Grenze oder in einem befriedeten Bereich und werden dennoch importiert.` : '',
+      untitledCount ? `${untitledCount} Einrichtung(en) ohne Namen erhalten einen automatisch erzeugten Namen.` : '',
+      unknownTypeCount ? `${unknownTypeCount} unbekannte(r) Markertyp(en) erhalten das Sonstige-Icon; der Originaltyp bleibt in den Notizen erhalten.` : ''
+    ].filter(Boolean);
+    const summary = [
+      `"${imported.name}" importieren?`,
+      `${mappedFacilities.length} Einrichtungen und ${pacifiedCount} befriedete(r) Bereich(e).`,
+      ...warnings
+    ].join('\n');
+    if (!window.confirm(summary)) return;
+
+    const featureId = `jwd-${crypto.randomUUID()}`;
+    importedFeatureId = featureId;
+    const { data, error } = await supabaseClient.rpc('create_hunting_profile', {
+      p_source_id: 'user-imports', p_feature_id: featureId, p_district_name: imported.name
+    });
+    if (error) throw new Error(error.message);
+    createdProfileId = data?.id || data?.[0]?.id;
+    if (!createdProfileId) throw new Error('Das Revierprofil wurde ohne Profil-ID angelegt.');
+    if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
+
+    const { error: boundaryError } = await supabaseClient.rpc('set_hunting_profile_boundary', {
+      p_profile_id: createdProfileId, p_geometry: imported.geometry
+    });
+    if (boundaryError) throw new Error(boundaryError.message);
+    if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
+
+    if (mappedFacilities.length) {
+      const { error: markerError } = await supabaseClient.from('hunting_markers').insert(mappedFacilities.map(marker => ({
+        profile_id: createdProfileId,
+        type_id: marker.typeId,
+        title: marker.title,
+        notes: marker.notes,
+        latitude: marker.latitude,
+        longitude: marker.longitude,
+        created_by: userId
+      })));
+      if (markerError) throw new Error(markerError.message);
+    }
+  } catch (error) {
+    let cleanupMessage = '';
+    if (createdProfileId) {
+      const { error: cleanupError } = await supabaseClient.from('hunting_profiles').delete().eq('id', createdProfileId);
+      if (cleanupError) cleanupMessage = ` Das unvollstaendige Profil konnte nicht automatisch entfernt werden: ${cleanupError.message}`;
+    }
+    if (user?.id === userId) element('saved-status').textContent = `Import fehlgeschlagen: ${error.message}.${cleanupMessage}`;
+    return;
+  } finally {
+    profileImportPending = false;
+    element('import-profile').disabled = !user;
+  }
+
+  if (user?.id !== userId) return;
+  element('source').value = 'user-imports';
+  saveSelection(null);
+  await loadSelectedSource();
+  const importedFeature = features.find(feature => featureIdentifier(feature, currentSource()) === importedFeatureId);
+  if (importedFeature) {
+    await selectFeature(importedFeature, null, createdProfileId);
+    renderResults();
+  }
+  await loadSavedProfiles();
+  element('saved-status').textContent = importedFeature
+    ? 'Revierdatei importiert und geoeffnet.'
+    : 'Revierdatei importiert. Waehle das Revier in der Liste aus.';
+}
+
 function currentSource() { return config.sources.find(source => source.id === element('source').value); }
 function status(message) { element('status').textContent = message; }
 function featureIdentifier(feature, source) {
@@ -255,6 +356,7 @@ function readSavedSelection() {
   try {
     const selection = JSON.parse(localStorage.getItem(selectionStorageKey));
     return selection && config.sources.some(source => source.id === selection.sourceId) &&
+      config.sources.find(source => source.id === selection.sourceId)?.type !== 'profile-imports' &&
       typeof selection.featureId === 'string' && selection.featureId.trim() ? selection : null;
   } catch { return null; }
 }
@@ -846,7 +948,7 @@ function selectFeature(feature, button, preferredProfileId) {
   selected = feature;
   const source = currentSource();
   const featureId = selectedFeatureId();
-  saveSelection(featureId ? { sourceId: source.id, featureId } : null);
+  saveSelection(featureId && source.type !== 'profile-imports' ? { sourceId: source.id, featureId } : null);
   boundary = L.geoJSON(feature, { style: { color: '#c43b55', weight: 3, fillColor: '#c43b55', fillOpacity: .14 } });
   if (element('show-boundary').checked) boundary.addTo(map);
   map.fitBounds(boundary.getBounds(), { padding: [24, 24], maxZoom: 16 });
@@ -935,13 +1037,24 @@ function updateSource() {
   const source = currentSource();
   if (sourceAttribution) map.attributionControl.removeAttribution(sourceAttribution);
   sourceAttribution = '';
-  if (!source) return;
+  const sourceLink = element('source-link');
+  const licenseLink = element('license-link');
+  sourceLink.hidden = !source || source.type === 'profile-imports';
+  licenseLink.hidden = !source || source.type === 'profile-imports';
+  if (!source) {
+    document.querySelector('.source-note span').textContent = 'Verfuegbare Abdeckung: konfigurierte Regionen';
+    return;
+  }
+  if (source.type === 'profile-imports') {
+    document.querySelector('.source-note span').textContent = 'Private, importierte Revierprofile';
+    return;
+  }
   document.querySelector('.source-note span').textContent = source.snapshotDate
     ? `Datenstand: ${source.snapshotDate} (lokaler Snapshot)`
     : 'Verfuegbare Abdeckung: konfigurierte Regionen';
-  element('source-link').href = source.metadataUrl;
-  element('license-link').href = source.licenseUrl;
-  element('license-link').textContent = source.license;
+  sourceLink.href = source.metadataUrl;
+  licenseLink.href = source.licenseUrl;
+  licenseLink.textContent = source.license;
   const attribution = document.createElement('span');
   attribution.textContent = `${source.attribution} (${source.license}); Darstellung unveraendert`;
   sourceAttribution = attribution.outerHTML;
@@ -952,8 +1065,24 @@ function boundaryCacheRequest(source) {
   return new Request(new URL(`./__boundary-cache__/${encodeURIComponent(source.id)}.json`, location.href));
 }
 
+async function loadImportedBoundaries(source) {
+  if (!user || !supabaseClient) throw new Error('Anmeldung erforderlich, um private Importe zu laden.');
+  const { data, error } = await supabaseClient.from('hunting_profiles')
+    .select('feature_id,district_name,boundary_geojson').eq('source_id', source.id);
+  if (error) throw new Error(error.message);
+  return boundaries({
+    type: 'FeatureCollection',
+    features: (data || []).filter(profile => profile.boundary_geojson).map(profile => ({
+      type: 'Feature',
+      id: profile.feature_id,
+      properties: { id: profile.feature_id, name: profile.district_name },
+      geometry: profile.boundary_geojson
+    }))
+  });
+}
+
 async function readBoundaryCache(source) {
-  if (!('caches' in window)) return null;
+  if (!('caches' in window) || source.type === 'profile-imports') return null;
   try {
     const cache = await caches.open(boundaryCacheName);
     const response = await cache.match(boundaryCacheRequest(source));
@@ -964,7 +1093,7 @@ async function readBoundaryCache(source) {
 }
 
 async function writeBoundaryCache(source, loadedFeatures) {
-  if (!('caches' in window)) return null;
+  if (!('caches' in window) || source.type === 'profile-imports') return null;
   try {
     const updatedAt = new Date().toISOString();
     const response = new Response(JSON.stringify({ type: 'FeatureCollection', features: loadedFeatures }), {
@@ -996,13 +1125,19 @@ async function fetchSelectedBoundaries(source, revision) {
   element('refresh-boundaries').disabled = true;
   status(features.length ? 'Reviergrenzen werden aktualisiert ...' : 'Reviergrenzen werden erstmals geladen ...');
   try {
-    const loaded = await loadBoundaries(source, requestController.signal);
+    const loaded = source.type === 'profile-imports'
+      ? await loadImportedBoundaries(source)
+      : await loadBoundaries(source, requestController.signal);
     if (controller !== requestController || revision !== boundaryLoadRevision) return;
     features = loaded;
     boundaryUpdatedAt = await writeBoundaryCache(source, loaded) || new Date().toISOString();
     if (revision === boundaryLoadRevision) showBoundaries();
   } catch (error) {
     if (controller !== requestController || revision !== boundaryLoadRevision) return;
+    if (source.type === 'profile-imports' && !user) {
+      status('Anmelden, um private Revierimporte zu laden.');
+      return;
+    }
     const reason = requestController.signal.aborted
       ? 'Zeitueberschreitung.'
       : `Datenquelle nicht erreichbar: ${error.message}.`;

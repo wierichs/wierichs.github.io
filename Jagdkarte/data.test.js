@@ -1,4 +1,5 @@
 import { loadBoundaries } from './data.js';
+import { mapJwdFacilities, parseJwdImport } from './jwd-import.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -29,6 +30,48 @@ async function withFetch(mock, action) {
 
 export async function runDataTests() {
   const passed = [];
+
+  const imported = parseJwdImport({
+    title: ' Test Revier ',
+    huntingGround: {
+      borders: [[
+        { latitude: 0, longitude: 0 }, { latitude: 0, longitude: 2 },
+        { latitude: 2, longitude: 2 }, { latitude: 2, longitude: 0 }
+      ]],
+      pacifiedAreas: [[
+        { latitude: 0.5, longitude: 0.5 }, { latitude: 0.5, longitude: 1 },
+        { latitude: 1, longitude: 0.5 }
+      ]],
+      facilities: [{ coordinate: { latitude: 1.5, longitude: 1.5 }, type: 'Bock' }]
+    }
+  });
+  assert(imported.name === 'Test Revier', 'JWD import did not trim the district name.');
+  assert(imported.geometry.type === 'Polygon' && imported.geometry.coordinates.length === 2,
+    'JWD import did not preserve the pacified area as a polygon hole.');
+  assert(imported.geometry.coordinates.every(ring => ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1]),
+    'JWD import did not close every polygon ring.');
+  assert(imported.facilities.length === 1 && imported.facilities[0].type === 'Bock',
+    'JWD import did not preserve facility data.');
+  passed.push('JWD converts boundaries, pacified areas, and facilities');
+
+  const mappedFacilities = mapJwdFacilities([
+    { latitude: 1, longitude: 1, type: 'Bock', title: '' },
+    { latitude: 1, longitude: 1, type: 'Unbekannt', title: 'Sonderpunkt' }
+  ], [{ id: 'bock', label: 'Bock' }, { id: 'sonstiges', label: 'Sonstiges' }]);
+  assert(mappedFacilities[0].typeId === 'bock' && mappedFacilities[0].title === 'Bock 1',
+    'JWD import did not map a known marker type.');
+  assert(mappedFacilities[1].typeId === 'sonstiges' && mappedFacilities[1].notes.includes('Unbekannt'),
+    'JWD import did not preserve an unknown marker type with the fallback icon type.');
+  passed.push('JWD maps known types and preserves unknown types with the fallback');
+
+  let invalidJwdRejected = false;
+  try {
+    parseJwdImport({ title: 'Invalid', huntingGround: { borders: [[
+      { latitude: 91, longitude: 0 }, { latitude: 0, longitude: 1 }, { latitude: 1, longitude: 0 }
+    ]] } });
+  } catch (error) { invalidJwdRejected = error.message.includes('ungueltige Koordinaten'); }
+  assert(invalidJwdRejected, 'JWD import accepted out-of-range coordinates.');
+  passed.push('JWD rejects invalid coordinate ranges');
 
   await withFetch(async () => response([feature('snapshot-1')]), async () => {
     const result = await loadBoundaries({ type: 'snapshot', url: '/snapshot.geojson' });

@@ -174,5 +174,15 @@ window.JAGDKARTE_CONFIG = {
     license: 'Nutzungsbedingungen beim Anbieter pruefen',
     licenseUrl: 'https://www.arcgis.com/home/item.html?id=8f64324d33b64914bd783c4ed8a570c7',
     metadataUrl: 'https://www.arcgis.com/home/item.html?id=8f64324d33b64914bd783c4ed8a570c7'
+  }, {
+    id: 'user-imports',
+    label: 'Eigene Importe',
+    type: 'profile-imports',
+    nameFields: ['name'],
+    idFields: ['id'],
+    attribution: 'Private Revierimporte',
+    license: 'Eigene Datei',
+    licenseUrl: '',
+    metadataUrl: ''
   }]
 };
