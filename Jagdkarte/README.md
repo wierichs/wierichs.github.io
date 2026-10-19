@@ -97,7 +97,10 @@ location is inside the district. **Standplatz** markers can be planned without
 current-location verification by the owner or a Bearbeiter; their target must
 remain inside the district. All profile members can see Standplatz markers.
 Members can delete their own temporary markers;
-owners and Bearbeiter can delete any marker.
+owners and Bearbeiter can delete any marker. Owners and Bearbeiter can also move
+any marker to their current browser-reported position, provided it is inside the
+profile boundary. The app uses a dedicated RPC for this operation; clients do
+not receive general marker UPDATE privileges.
 Each signed-in user can click their email address in the header to set an
 optional **Anzeigename** for shared-revier participants. Only members of a
 shared profile can retrieve participant names and emails; blank names fall back
@@ -114,25 +117,29 @@ confirmation warning. `Bock`, `Erdsitz`, and `Salzlecke` have distinct marker
 types but currently use the **Sonstiges** icon. Unknown types also use that icon,
 with the original type retained in the marker notes.
 
-When an invitee selects a shared profile while Jagdmodus is active, the app asks
-for explicit location consent before requesting browser geolocation. Declining,
-or denying browser permission, leaves the public district visible in guest mode
-without profile data. With consent, the first fix is sent immediately and the
-location is refreshed every 30 seconds only while it is inside the selected
-polygon. Profile members and the owner can see current shared participant
-locations; the owner also shares their own current position while Jagdmodus is
-active. Their maps refresh every 30 seconds. Entries older than 90 seconds are
-not displayed. Leaving the polygon, changing profiles, or signing out removes
-the user's location row when the app can reach Supabase.
+When an invitee selects a shared profile while Jagdmodus is active, the profile
+and its shared markers remain available without sharing that user's location.
+An inline **Standort mit diesem Revier teilen** checkbox appears in the profile;
+the app requests a browser location only after it is enabled. Browser permission
+is separate from this app-level opt-in. Denying browser permission leaves the
+profile usable and the user's location unshared. With opt-in, the first fix is
+sent immediately and the location is refreshed every 30 seconds only while it
+is inside the selected polygon. Profile members and the owner can see current
+shared participant locations; the owner also shares their own current position
+while Jagdmodus is active. Their maps refresh every 30 seconds. Entries older
+than 90 seconds are not displayed. Turning off the checkbox, leaving the
+polygon, changing profiles, or signing out removes the user's location row when
+the app can reach Supabase.
 
-The owner and Bearbeiter control the **Jagdmodus** checkbox. It is off by default
-and the UI states that enabling it also shares the current user's location. While off,
-shared profile markers remain available to members but live participant
-locations are hidden and cannot be written; switching it off also deletes all
-stored locations for that profile. Active clients poll the mode and stop location
-tracking after an owner or Bearbeiter changes it. Turning it on prompts each
-participant for location consent before tracking resumes. Rerun `schema.sql` to
-add profile roles, role-aware RPCs, and row-level security checks.
+The owner and Bearbeiter control the **Jagdmodus** checkbox. It is off by default.
+While off, shared profile markers remain available to members, but live
+participant locations are hidden and cannot be written; switching it off also
+deletes all stored locations for that profile. Active clients poll the mode and
+stop location tracking after an owner or Bearbeiter changes it. When the owner
+activates Jagdmodus, the owner's own location is shared. Invited members,
+including Bearbeiter, must separately enable **Standort mit diesem Revier
+teilen** before their own location is requested and shared. Rerun `schema.sql`
+to add profile roles, role-aware RPCs, and row-level security checks.
 
 Temporary markers expire 48 hours after creation according to the database clock.
 RLS immediately hides expired rows; a pg_cron job deletes them every minute even
