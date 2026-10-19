@@ -15,7 +15,7 @@
   <script defer src="./lucide.js"></script>
   <script defer src="./supabase.js"></script>
   <script defer src="./config.js"></script>
-  <script type="module" src="./app.js?v=67"></script>
+  <script type="module" src="./app.js?v=68"></script>
 </head>
 <body>
   <header class="topbar">
@@ -66,6 +66,9 @@
           <select id="profile-list" aria-label="Profil fuer dieses Revier"></select>
           <label id="hunting-mode-control" class="toggle" hidden><input id="hunting-mode" type="checkbox"> Jagdmodus</label>
           <p id="owner-location-notice" hidden>Im Jagdmodus wird auch dein Standort mit den Reviermitgliedern geteilt.</p>
+          <label id="share-location-control" class="toggle" hidden><input id="share-location" type="checkbox"> Standort mit diesem Revier teilen</label>
+          <p id="share-location-note" hidden>Wenn der Jagdmodus aktiv ist, sehen die Reviermitglieder deinen Standort innerhalb der Reviergrenze. Die Position wird alle 30 Sekunden aktualisiert. Du kannst die Freigabe hier jederzeit beenden.</p>
+          <p id="share-location-status" role="status" aria-live="polite" hidden></p>
           <p id="presence-status" role="status" aria-live="polite" hidden></p>
           <div class="profile-actions">
             <button id="invite-toggle" type="button" hidden>Benutzer einladen</button>
@@ -107,11 +110,6 @@
     <form id="login-form"><label for="email">E-Mail-Adresse</label><input id="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@beispiel.de"><button id="send-link" class="primary" type="submit"><i data-lucide="mail" aria-hidden="true"></i><span>Anmeldecode senden</span></button></form>
     <form id="code-form" hidden><label for="email-code">E-Mail-Code</label><input id="email-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" minlength="6" maxlength="10" required><button id="verify-code" class="primary" type="submit"><i data-lucide="shield-check" aria-hidden="true"></i><span>Bestaetigen</span></button></form>
     <p id="login-status" role="status" aria-live="polite"></p>
-  </dialog>
-  <dialog id="location-consent-dialog" aria-labelledby="location-consent-title">
-    <div class="dialog-heading"><h2 id="location-consent-title">Standortfreigabe</h2></div>
-    <p>Wenn du dieses geteilte Revier auswaehlst und der Owner den Jagdmodus aktiviert hat, wird dein Standort nur innerhalb der Reviergrenze an die Mitglieder dieses Revierprofils uebermittelt. Sie sehen deine aktuelle Position. Die Uebermittlung erfolgt alle 30 Sekunden. Beim Ausschalten des Jagdmodus, Verlassen der Grenze oder Abwaehlen wird der gespeicherte Standort geloescht. Ohne Zustimmung nutzt du die Jagdkarte wie ein Gast.</p>
-    <div class="profile-actions"><button id="decline-location" type="button">Als Gast ansehen</button><button id="accept-location" class="primary" type="button">Zustimmen und fortfahren</button></div>
   </dialog>
   <dialog id="display-name-dialog" aria-labelledby="display-name-title">
     <div class="dialog-heading"><h2 id="display-name-title">Benutzerprofil</h2><button id="close-display-name" class="icon-button" type="button" aria-label="Schliessen" title="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>

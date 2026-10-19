@@ -76,6 +76,7 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .profile-section .result-heading { margin: 0 0 8px; padding: 0; border: 0; gap: 8px; }
 .profile-section .result-heading button, .profile-actions button, #invite-form button { min-height: 36px; padding: 7px 10px; font-size: 12px; }
 .profile-section > p, #marker-coordinates { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.profile-section #share-location-note { margin: 4px 0 8px; }
 #marker-expiry-note { margin: -2px 0 8px; }
 #presence-status { margin: 8px 0; }
 .profile-section label { margin-top: 10px; }
@@ -129,9 +130,6 @@ dialog::backdrop { background: #152a2260; }
 #login-form, #code-form { margin-top: 20px; }
 #login-form button, #code-form button { width: 100%; margin-top: 16px; }
 #login-status { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-#location-consent-dialog p { font-size: 14px; line-height: 1.6; }
-#location-consent-dialog .profile-actions { justify-content: flex-end; }
-@media (max-width: 420px) { #location-consent-dialog .profile-actions { flex-direction: column-reverse; } }
 @media (max-width: 700px) {
   .topbar { height: 60px; padding: 0 14px; gap: 10px; }
   .brand { font-size: 21px; } #user-label { display: block; flex: 0 1 96px; max-width: 96px; font-size: 10px; padding: 0; } .network { display: none; } .account { margin-left: auto; gap: 6px; }

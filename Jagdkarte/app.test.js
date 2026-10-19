@@ -3,7 +3,7 @@ export async function initializeAppFixture() {
   document.body.replaceChildren(...parsed.body.childNodes);
   for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) document.head.append(stylesheet);
   const geometry = { type: 'Polygon', coordinates: [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]]] };
-  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false };
+  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false, denyLocation: false };
   let authCallback = () => {};
   const profile = () => ({ id: 'test-profile', source_id: 'user-imports', feature_id: 'jwd-test',
     district_name: 'Privates Testrevier', owner_id: 'owner', created_at: '2026-01-01',
@@ -74,8 +74,9 @@ export async function initializeAppFixture() {
   };
   window.supabase = { createClient: () => client };
   Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
-    getCurrentPosition(success) {
+    getCurrentPosition(success, error) {
       state.gpsRequests += 1;
+      if (state.denyLocation) { error({ code: 1 }); return; }
       success({ coords: { latitude: 49.5, longitude: 6.5, accuracy: 5 } });
     }
   } });
@@ -145,14 +146,28 @@ export async function runAppTests() {
     await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
     state.mode = true;
     change('profile-list', 'test-profile');
-    await waitFor(() => control('location-consent-dialog').open);
-    assert(state.gpsRequests === 0, 'A stale hunting mode bypassed location consent.');
-    control('accept-location').click();
+    await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
+    assert(state.gpsRequests === 0 && !control('location-consent-dialog'),
+      'Selecting a shared profile should not request location or show a blocking consent dialog.');
+    control('share-location').checked = true;
+    control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
     await waitFor(() => state.gpsRequests === 1);
-    assert(control('profile-list').value === 'test-profile', 'Accepted consent did not activate the profile.');
-    passed.push('App rechecks current hunting mode before GPS and requires explicit consent');
+    assert(control('profile-list').value === 'test-profile', 'Location sharing changed the active profile.');
+    passed.push('Shared profile location requires explicit opt-in and remains available without it');
     await waitFor(() => frame.document.querySelectorAll('.profile-location-marker').length === 1);
     passed.push('App shows the last known participant position after a long pause');
+    control('share-location').checked = false;
+    control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location').checked);
+    assert(state.gpsRequests === 1, 'Stopping location sharing restarted location requests.');
+    state.denyLocation = true;
+    control('share-location').checked = true;
+    control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => control('share-location-status').textContent.includes('Browser-Standortzugriff abgelehnt'));
+    assert(control('profile-list').value === 'test-profile' && !control('share-location').checked && state.gpsRequests === 2,
+      'Denying browser location access should keep the shared profile available without sharing.');
+    state.denyLocation = false;
+    passed.push('Browser location denial keeps the profile available and sharing disabled');
 
     control('account-button').click();
     await waitFor(() => control('user-label').hidden);
@@ -168,7 +183,7 @@ export async function runAppTests() {
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('hunting-mode-control').hidden);
-    await waitFor(() => state.gpsRequests === 2);
+    await waitFor(() => state.gpsRequests === 3);
     state.holdMode = true;
     control('hunting-mode').checked = false;
     control('hunting-mode').dispatchEvent(new frame.Event('change', { bubbles: true }));
@@ -176,8 +191,7 @@ export async function runAppTests() {
     control('clear').click();
     state.pendingMode();
     await waitFor(() => !control('hunting-mode').disabled);
-    assert(control('selection').hidden && control('presence-status').hidden &&
-      !control('location-consent-dialog').open && state.gpsRequests === 2,
+    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 3,
     'A stale hunting mode write restarted profile UI or GPS.');
     passed.push('App ignores a pending hunting-mode response after selection changes');
     return passed;

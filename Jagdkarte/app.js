@@ -86,7 +86,6 @@ let presenceInterval = null;
 let huntingModeInterval = null;
 let presenceRevision = 0;
 let profileActivationRevision = 0;
-let pendingProfileId = null;
 let huntingModePending = false;
 const profileMarkers = L.layerGroup().addTo(map);
 const profileLocations = L.layerGroup().addTo(map);
@@ -494,6 +493,11 @@ function saveProfileChoice(profileId) {
 }
 
 function profileStatus(message) { element('profile-status').textContent = message; }
+function shareLocationStatus(message) {
+  const status = element('share-location-status');
+  status.textContent = message;
+  status.hidden = !message;
+}
 function readMarkerIconSize() {
   try {
     const size = localStorage.getItem(markerIconSizeStorageKey);
@@ -541,6 +545,11 @@ function updateProfileControls() {
   element('hunting-mode-control').hidden = !canEdit;
   element('owner-location-notice').hidden = !canEdit;
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
+  const canShareLocation = Boolean(user && activeProfile && activeProfile.owner_id !== user.id && activeProfile.hunting_mode);
+  element('share-location-control').hidden = !canShareLocation;
+  element('share-location-note').hidden = !canShareLocation;
+  element('share-location').checked = Boolean(canShareLocation && sharingProfileId === activeProfile.id);
+  if (!canShareLocation) shareLocationStatus('');
   element('hunting-mode').disabled = huntingModePending;
   const availableTypes = markerTypes.filter(type => canEdit || (type.temporary && !type.editorsOnly));
   element('add-marker').hidden = !user || !activeProfile || availableTypes.length === 0;
@@ -740,9 +749,9 @@ function updateHuntingMode(profile, enabled) {
     startPresenceUpdates();
     void startProfileLocationSharing(profile);
   } else {
-    pendingProfileId = profile.id;
-    element('profile-list').value = '';
-    element('location-consent-dialog').showModal();
+    element('presence-status').hidden = false;
+    element('presence-status').textContent = 'Jagdmodus aktiv. Du kannst deinen Standort mit diesem Revier teilen.';
+    startPresenceUpdates();
   }
 }
 
@@ -826,7 +835,9 @@ async function loadProfileLocations() {
 
 async function startProfileLocationSharing(profile) {
   if (!navigator.geolocation) {
-    profileStatus('Standortfreigabe im Browser nicht verfuegbar. Revierprofile bleiben sichtbar.');
+    element('share-location').checked = false;
+    updateProfileControls();
+    shareLocationStatus('Standortbestimmung im Browser nicht verfuegbar.');
     return;
   }
   sharingProfileId = profile.id;
@@ -840,6 +851,9 @@ async function startProfileLocationSharing(profile) {
           .eq('profile_id', profile.id).eq('user_id', user.id);
         if (error) profileStatus(`Standort ausserhalb des Reviers konnte nicht entfernt werden: ${error.message}`);
       }
+      if (sharingProfileId === profile.id && activeProfile?.id === profile.id && profile.owner_id !== user.id) {
+        shareLocationStatus('Dein Standort liegt ausserhalb des Reviers und wird nicht geteilt.');
+      }
       return;
     }
     sharedLocationIsInBoundary = true;
@@ -851,8 +865,15 @@ async function startProfileLocationSharing(profile) {
       accuracy: position.coords.accuracy,
       updated_at: new Date().toISOString()
     }, { onConflict: 'profile_id,user_id' });
-    if (error) profileStatus(`Standort konnte nicht uebermittelt werden: ${error.message}. Datenbankschema aus schema.sql pruefen.`);
+    if (sharingProfileId !== profile.id || activeProfile?.id !== profile.id) return;
+    if (error) {
+      profileStatus(`Standort konnte nicht uebermittelt werden: ${error.message}. Datenbankschema aus schema.sql pruefen.`);
+      if (profile.owner_id !== user.id) shareLocationStatus('Standort konnte nicht mit diesem Revier geteilt werden.');
+    }
     else if (profile.owner_id === user.id) void loadProfileLocations();
+    else if (activeProfile?.id === profile.id) {
+      shareLocationStatus('Dein Standort wird mit diesem Revier geteilt.');
+    }
   };
   const requestLocation = () => {
     if (sharingProfileId !== profile.id || locationRequestPending || !activeProfile?.hunting_mode) return;
@@ -872,18 +893,24 @@ async function startProfileLocationSharing(profile) {
           .eq('profile_id', profile.id).eq('user_id', user.id);
         profileStatus('Standortzugriff abgelehnt. Jagdmodus bleibt fuer die Gruppe aktiv, dein Standort wird nicht geteilt.');
       } else if (error.code === 1) {
-        void rejectProfileSelection(profile, 'Standortzugriff abgelehnt. Das Revier wird wie fuer einen Gast angezeigt.');
+        clearInterval(locationInterval);
+        locationInterval = null;
+        sharingProfileId = null;
+        sharedLocationIsInBoundary = false;
+        void supabaseClient.from('hunting_profile_locations').delete()
+          .eq('profile_id', profile.id).eq('user_id', user.id);
+        updateProfileControls();
+        shareLocationStatus('Browser-Standortzugriff abgelehnt. Dein Standort wird nicht geteilt.');
       } else {
         profileStatus('Warte auf eine verfuegbare Standortbestimmung.');
       }
     }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
   };
-  profileStatus('Browser-Standortfreigabe wird angefordert ...');
-  requestLocation();
   locationInterval = setInterval(requestLocation, 30000);
+  requestLocation();
 }
 
-async function activateProfile(profile, locationConsentGranted = false) {
+async function activateProfile(profile) {
   const revision = ++profileActivationRevision;
   await stopProfileLocation();
   if (revision !== profileActivationRevision) return;
@@ -906,13 +933,6 @@ async function activateProfile(profile, locationConsentGranted = false) {
       return;
     }
     profile.member_role = membership.role;
-  }
-  if (profile.owner_id !== user?.id && profile.hunting_mode && !locationConsentGranted) {
-    element('presence-status').hidden = true;
-    pendingProfileId = profile.id;
-    element('profile-list').value = '';
-    element('location-consent-dialog').showModal();
-    return;
   }
   activeProfile = null;
   element('profile-list').value = '';
@@ -953,21 +973,8 @@ async function activateProfile(profile, locationConsentGranted = false) {
     element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
     return;
   }
+  element('presence-status').textContent = 'Jagdmodus aktiv. Du kannst deinen Standort mit diesem Revier teilen.';
   startPresenceUpdates();
-  void startProfileLocationSharing(profile);
-}
-
-async function rejectProfileSelection(profile, message) {
-  if (sharingProfileId !== profile.id && activeProfile?.id !== profile.id) return;
-  const revision = ++profileActivationRevision;
-  await stopProfileLocation();
-  if (revision !== profileActivationRevision) return;
-  activeProfile = null;
-  element('profile-list').value = '';
-  clearProfileMarkers();
-  element('presence-status').hidden = true;
-  updateProfileControls();
-  profileStatus(message);
 }
 
 async function loadProfiles(preferredId) {
@@ -1069,8 +1076,6 @@ async function loadProfiles(preferredId) {
 function clearSelection() {
   profileActivationRevision += 1;
   void stopProfileLocation();
-  pendingProfileId = null;
-  if (element('location-consent-dialog').open) element('location-consent-dialog').close();
   if (boundary) map.removeLayer(boundary);
   boundary = null;
   selected = null;
@@ -1498,29 +1503,22 @@ async function chooseProfile(profile) {
   }
   await activateProfile(profile);
 }
-element('accept-location').addEventListener('click', () => {
-  const profile = profiles.find(candidate => candidate.id === pendingProfileId);
-  pendingProfileId = null;
-  element('location-consent-dialog').close();
-  if (profile) void activateProfile(profile, true);
-});
-function declineProfileLocation() {
-  profileActivationRevision += 1;
-  void stopProfileLocation();
-  saveProfileChoice(null);
-  pendingProfileId = null;
-  element('location-consent-dialog').close();
-  element('profile-list').value = '';
-  activeProfile = null;
-  clearProfileMarkers();
-  element('presence-status').hidden = true;
-  updateProfileControls();
-  profileStatus('Standortfreigabe abgelehnt. Du siehst dieses Revier wie ein Gast.');
-}
-element('decline-location').addEventListener('click', declineProfileLocation);
-element('location-consent-dialog').addEventListener('cancel', event => {
-  event.preventDefault();
-  declineProfileLocation();
+element('share-location').addEventListener('change', event => {
+  const profile = activeProfile;
+  if (!profile || profile.owner_id === user?.id || !profile.hunting_mode) {
+    event.currentTarget.checked = false;
+    return;
+  }
+  if (event.currentTarget.checked) {
+    shareLocationStatus('Browser-Standortfreigabe wird angefragt ...');
+    void startProfileLocationSharing(profile);
+    return;
+  }
+  shareLocationStatus('Dein Standort wird nicht mehr geteilt.');
+  void stopProfileLocation().then(() => {
+    if (activeProfile?.id === profile.id && profile.hunting_mode) startPresenceUpdates();
+    updateProfileControls();
+  });
 });
 element('invite-toggle').addEventListener('click', () => {
   element('invite-form').hidden = !element('invite-form').hidden;
