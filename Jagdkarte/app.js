@@ -660,6 +660,60 @@ async function loadProfileMarkers() {
       expiry.textContent = `Gueltig bis ${new Date(expiresAt).toLocaleString('de-DE')}`;
       popup.append(expiry);
     }
+    if (canEditProfile(activeProfile)) {
+      const move = document.createElement('button');
+      move.type = 'button';
+      move.textContent = 'Auf meinen Standort verschieben';
+      move.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+          profileStatus('Standortbestimmung im Browser nicht verfuegbar.');
+          return;
+        }
+        const profileId = activeProfile.id;
+        const userId = user.id;
+        move.disabled = true;
+        profileStatus('Aktuelle Position wird bestimmt ...');
+        navigator.geolocation.getCurrentPosition(async position => {
+          const coordinates = { lat: position.coords.latitude, lng: position.coords.longitude };
+          if (activeProfile?.id !== profileId || user?.id !== userId || !canEditProfile()) {
+            move.disabled = false;
+            return;
+          }
+          if (!pointInSelectedFeature(coordinates)) {
+            move.disabled = false;
+            profileStatus('Dein aktueller Standort liegt ausserhalb des Reviers. Die Markierung wurde nicht verschoben.');
+            return;
+          }
+          try {
+            const { error: moveError } = await supabaseClient.rpc('move_hunting_marker_to_location', {
+              p_marker_id: marker.id,
+              p_latitude: coordinates.lat,
+              p_longitude: coordinates.lng
+            });
+            if (activeProfile?.id !== profileId || user?.id !== userId) return;
+            move.disabled = false;
+            if (moveError) profileStatus(`Markierung konnte nicht verschoben werden: ${moveError.message}`);
+            else {
+              profileStatus('Markierung auf deinen aktuellen Standort verschoben.');
+              await loadProfileMarkers();
+            }
+          } catch (error) {
+            move.disabled = false;
+            if (activeProfile?.id === profileId && user?.id === userId) {
+              profileStatus(`Markierung konnte nicht verschoben werden: ${error.message}`);
+            }
+          }
+        }, error => {
+          move.disabled = false;
+          if (activeProfile?.id === profileId && user?.id === userId) {
+            profileStatus(error.code === 1
+              ? 'Standortzugriff abgelehnt. Die Markierung wurde nicht verschoben.'
+              : 'Aktuelle Position konnte nicht bestimmt werden.');
+          }
+        }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+      });
+      popup.append(move);
+    }
     if (canEditProfile(activeProfile) || (type.temporary && marker.created_by === user.id)) {
       const remove = document.createElement('button');
       remove.type = 'button';

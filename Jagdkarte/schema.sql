@@ -306,6 +306,51 @@ begin
 end;
 $$;
 
+create or replace function public.move_hunting_marker_to_location(
+  p_marker_id uuid, p_latitude double precision, p_longitude double precision
+)
+returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  marker_profile_id uuid;
+  district_geojson jsonb;
+  district_geometry extensions.geometry;
+begin
+  if auth.uid() is null then
+    raise exception 'Anmeldung erforderlich';
+  end if;
+  if p_latitude is null or p_longitude is null
+    or not (p_latitude between -90 and 90 and p_longitude between -180 and 180) then
+    raise exception 'Ungueltige Koordinaten';
+  end if;
+  select marker.profile_id, profile.boundary_geojson
+    into marker_profile_id, district_geojson
+    from public.hunting_markers marker
+    join public.hunting_profiles profile on profile.id = marker.profile_id
+    where marker.id = p_marker_id and (marker.expires_at is null or marker.expires_at > now())
+    for update of marker;
+  if not found then
+    raise exception 'Markierung nicht gefunden oder abgelaufen';
+  end if;
+  if not public.can_edit_hunting_profile(marker_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann Markierungen verschieben';
+  end if;
+  if district_geojson is null then
+    raise exception 'Der Owner muss dieses Profil einmal oeffnen, um die Reviergrenze zu hinterlegen';
+  end if;
+  district_geometry := extensions.st_setsrid(extensions.st_geomfromgeojson(district_geojson::text), 4326);
+  if not extensions.st_covers(district_geometry,
+      extensions.st_setsrid(extensions.st_makepoint(p_longitude, p_latitude), 4326)) then
+    raise exception 'Der aktuelle Standort liegt ausserhalb des Reviers';
+  end if;
+  update public.hunting_markers
+    set latitude = p_latitude, longitude = p_longitude
+    where id = p_marker_id;
+end;
+$$;
+
 create or replace function public.delete_expired_hunting_markers()
 returns void
 language sql security definer
@@ -474,7 +519,9 @@ revoke all on function public.set_hunting_profile_boundary(uuid, jsonb) from pub
 revoke all on function public.set_hunting_marker_expiry() from public, anon, authenticated;
 revoke all on function public.create_temporary_hunting_marker(uuid, text, text, text,
   double precision, double precision, double precision, double precision) from public, anon, authenticated;
+revoke all on function public.move_hunting_marker_to_location(uuid, double precision, double precision) from public, anon, authenticated;
 revoke all on function public.delete_expired_hunting_markers() from public, anon, authenticated;
 grant execute on function public.set_hunting_profile_boundary(uuid, jsonb) to authenticated;
 grant execute on function public.create_temporary_hunting_marker(uuid, text, text, text,
   double precision, double precision, double precision, double precision) to authenticated;
+grant execute on function public.move_hunting_marker_to_location(uuid, double precision, double precision) to authenticated;

@@ -79,7 +79,7 @@ Run `schema.sql` once in the Supabase Dashboard SQL Editor for this project.
 It creates the profile, member, invitation, and marker tables, their RLS
 policies, and the RPC functions used by the app. It is additive and can be run
 again safely. Rerun it after updating the app so the location table, temporary
-markers, expiry job, and their RLS policies are installed. Enable PostGIS in the
+markers, marker-position RPC, expiry job, and their RLS policies are installed. Enable PostGIS in the
 `extensions` schema and pg_cron in Supabase before running it if they are not
 already available. Do not disable RLS or grant access to the `anon` role.
 

@@ -3,7 +3,8 @@ export async function initializeAppFixture() {
   document.body.replaceChildren(...parsed.body.childNodes);
   for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) document.head.append(stylesheet);
   const geometry = { type: 'Polygon', coordinates: [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]]] };
-  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false, denyLocation: false };
+  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false,
+    denyLocation: false, memberRole: 'guest', moveRequests: [], currentPosition: { latitude: 49.5, longitude: 6.5 } };
   let authCallback = () => {};
   const profile = () => ({ id: 'test-profile', source_id: 'user-imports', feature_id: 'jwd-test',
     district_name: 'Privates Testrevier', owner_id: 'owner', created_at: '2026-01-01',
@@ -16,7 +17,10 @@ export async function initializeAppFixture() {
     ];
     if (!state.user) return [];
     if (table === 'hunting_profiles') return [profile()];
-    if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: 'guest' }];
+    if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: state.memberRole }];
+    if (table === 'hunting_markers') return [{ id: 'test-marker', profile_id: 'test-profile', type_id: 'sonstiges',
+      title: 'Testmarker', notes: '', latitude: 49.6, longitude: 6.6, created_by: 'owner',
+      created_at: '2026-01-01T00:00:00Z', expires_at: null }];
     if (table === 'hunting_profile_locations') return [{ profile_id: 'test-profile', user_id: 'member',
       latitude: 49.5, longitude: 6.5, accuracy: 12,
       updated_at: new Date(Date.now() - 15 * 60 * 1000).toISOString() }];
@@ -49,6 +53,10 @@ export async function initializeAppFixture() {
   const client = {
     from: query,
     rpc(name, parameters) {
+      if (name === 'move_hunting_marker_to_location') {
+        state.moveRequests.push(parameters);
+        return Promise.resolve({ data: null, error: null });
+      }
       if (name === 'set_hunting_mode') {
         state.modeRequests += 1;
         if (state.holdMode) return new Promise(resolve => {
@@ -77,7 +85,7 @@ export async function initializeAppFixture() {
     getCurrentPosition(success, error) {
       state.gpsRequests += 1;
       if (state.denyLocation) { error({ code: 1 }); return; }
-      success({ coords: { latitude: 49.5, longitude: 6.5, accuracy: 5 } });
+      success({ coords: { ...state.currentPosition, accuracy: 5 } });
     }
   } });
   Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: {
@@ -138,6 +146,7 @@ export async function runAppTests() {
       control(id).value = value;
       control(id).dispatchEvent(new frame.Event('change', { bubbles: true }));
     };
+    state.memberRole = 'editor';
     state.signIn('member');
     await waitFor(() => !control('user-label').hidden);
     change('source', 'user-imports');
@@ -149,9 +158,31 @@ export async function runAppTests() {
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
     assert(state.gpsRequests === 0 && !control('location-consent-dialog'),
       'Selecting a shared profile should not request location or show a blocking consent dialog.');
+    await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
+    await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .some(button => button.textContent === 'Auf meinen Standort verschieben'));
+    const moveButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .find(button => button.textContent === 'Auf meinen Standort verschieben');
+    moveButton.click();
+    await waitFor(() => state.moveRequests.length === 1);
+    assert(state.moveRequests[0].p_marker_id === 'test-marker' && state.moveRequests[0].p_latitude === 49.5 &&
+      state.moveRequests[0].p_longitude === 6.5, 'Editor marker move did not submit the current GPS position.');
+    passed.push('Editor can move a marker to the current position');
+    state.currentPosition = { latitude: 52, longitude: 8 };
+    await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
+    await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .some(button => button.textContent === 'Auf meinen Standort verschieben'));
+    Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .find(button => button.textContent === 'Auf meinen Standort verschieben').click();
+    await waitFor(() => control('profile-status').textContent.includes('ausserhalb des Reviers'));
+    assert(state.moveRequests.length === 1, 'Marker move outside the district reached the database.');
+    state.currentPosition = { latitude: 49.5, longitude: 6.5 };
+    passed.push('Marker move outside the selected district is rejected');
     control('share-location').checked = true;
     control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
-    await waitFor(() => state.gpsRequests === 1);
+    await waitFor(() => state.gpsRequests === 3);
     assert(control('profile-list').value === 'test-profile', 'Location sharing changed the active profile.');
     passed.push('Shared profile location requires explicit opt-in and remains available without it');
     await waitFor(() => frame.document.querySelectorAll('.profile-location-marker').length === 1);
@@ -159,12 +190,12 @@ export async function runAppTests() {
     control('share-location').checked = false;
     control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location').checked);
-    assert(state.gpsRequests === 1, 'Stopping location sharing restarted location requests.');
+    assert(state.gpsRequests === 3, 'Stopping location sharing restarted location requests.');
     state.denyLocation = true;
     control('share-location').checked = true;
     control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
     await waitFor(() => control('share-location-status').textContent.includes('Browser-Standortzugriff abgelehnt'));
-    assert(control('profile-list').value === 'test-profile' && !control('share-location').checked && state.gpsRequests === 2,
+    assert(control('profile-list').value === 'test-profile' && !control('share-location').checked && state.gpsRequests === 4,
       'Denying browser location access should keep the shared profile available without sharing.');
     state.denyLocation = false;
     passed.push('Browser location denial keeps the profile available and sharing disabled');
@@ -183,7 +214,12 @@ export async function runAppTests() {
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('hunting-mode-control').hidden);
-    await waitFor(() => state.gpsRequests === 3);
+    await waitFor(() => state.gpsRequests === 5);
+    await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
+    await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .some(button => button.textContent === 'Auf meinen Standort verschieben'));
+    passed.push('Owner can move a marker from the popup');
     state.holdMode = true;
     control('hunting-mode').checked = false;
     control('hunting-mode').dispatchEvent(new frame.Event('change', { bubbles: true }));
@@ -191,7 +227,7 @@ export async function runAppTests() {
     control('clear').click();
     state.pendingMode();
     await waitFor(() => !control('hunting-mode').disabled);
-    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 3,
+    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 5,
     'A stale hunting mode write restarted profile UI or GPS.');
     passed.push('App ignores a pending hunting-mode response after selection changes');
     return passed;
