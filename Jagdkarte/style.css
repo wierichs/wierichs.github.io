@@ -113,6 +113,7 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #map-status { position: absolute; top: 70px; right: 16px; z-index: 500; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(360px, calc(100% - 32px)); background: white; padding: 8px 12px; font-size: 13px; box-shadow: 0 2px 8px #20342826; }
 #map-status-text { min-width: 0; overflow-wrap: anywhere; }
 #close-map-status { border: 0; background: transparent; }
+.leaflet-control-attribution .maptiler-attribution-logo { width: 64px; height: 13px; object-fit: contain; vertical-align: middle; }
 .leaflet-container { font-family: 'Map Sans', sans-serif; }
 dialog { border: 1px solid var(--line); border-radius: 8px; padding: 24px; width: min(420px, calc(100% - 32px)); color: var(--ink); }
 dialog::backdrop { background: #152a2260; }

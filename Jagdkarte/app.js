@@ -13,6 +13,26 @@ const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
+const mapTilerApiKey = typeof config.mapTilerApiKey === 'string' ? config.mapTilerApiKey.trim() : '';
+if (mapTilerApiKey) {
+  const satelliteTiles = L.tileLayer(
+    `https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.jpg?key=${encodeURIComponent(mapTilerApiKey)}`,
+    {
+      tileSize: 512,
+      zoomOffset: -1,
+      minZoom: 1,
+      maxZoom: 20,
+      attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener"><img class="maptiler-attribution-logo" src="https://api.maptiler.com/resources/logo.svg" alt="MapTiler"> &copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap contributors</a>',
+      crossOrigin: true
+    }
+  );
+  satelliteTiles.on('tileerror', () => {
+    if (satelliteTileWarningShown) return;
+    showMapStatus('Satellitenkarte nicht verfuegbar. API-Key und Verbindung pruefen.', 'error');
+    satelliteTileWarningShown = true;
+  });
+  L.control.layers({ OpenStreetMap: tiles, Satellit: satelliteTiles }, null, { position: 'topleft' }).addTo(map);
+}
 L.control.scale({ imperial: false }).addTo(map);
 let user = null;
 let auth = null;
@@ -31,6 +51,7 @@ let installPrompt = null;
 let authRevision = 0;
 let sourceAttribution = '';
 let tileWarningShown = false;
+let satelliteTileWarningShown = false;
 let mapStatusTimer = null;
 let profiles = [];
 let savedProfiles = [];
@@ -73,6 +94,9 @@ element('toggle-search-panel').addEventListener('click', () => {
   element('toggle-search-panel').title = label;
   element('collapse-search-icon').toggleAttribute('hidden', collapsed);
   element('expand-search-icon').toggleAttribute('hidden', !collapsed);
+});
+map.on('baselayerchange', event => {
+  if (event.name === 'Satellit') satelliteTileWarningShown = false;
 });
 tiles.on('tileerror', () => {
   if (!tileWarningShown) {

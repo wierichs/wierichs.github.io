@@ -378,6 +378,13 @@ https://operations.osmfoundation.org/policies/tiles/ . For offline basemaps,
 use a provider that explicitly permits them or self-hosted tiles. Offline
 authentication is not simulated. Loaded polygons remain cached across reloads.
 
+An optional MapTiler Satellite basemap can be enabled by setting
+`mapTilerApiKey` in `config.js`. The key is used in the browser, so restrict it
+to the deployed site's referrer in MapTiler. Without a key, only OpenStreetMap
+is offered and no MapTiler requests are made. Keep the MapTiler logo and
+attribution visible when using the satellite layer; satellite tiles are not
+cached offline.
+
 For a new deployment, increment the cache version in `sw.js` whenever a cached
 asset changes, including authentication configuration. Installation reloads shell
 assets from the network rather than the browser's HTTP cache. A fully installed

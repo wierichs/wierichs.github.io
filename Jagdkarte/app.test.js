@@ -87,6 +87,7 @@ export async function initializeAppFixture() {
   await import('./vendor/leaflet/leaflet.js');
   await import('./lucide.js');
   await import('./config.js');
+  window.JAGDKARTE_CONFIG.mapTilerApiKey = 'mock-maptiler-key';
   const tileLayer = window.L.tileLayer;
   window.L.tileLayer = (_url, options) => tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jHh0AAAAASUVORK5CYII=', options);
   await import('./app.js');
@@ -115,6 +116,9 @@ export async function runAppTests() {
     const frame = iframe.contentWindow;
     const state = frame.jagdkarteTest;
     const control = id => frame.document.getElementById(id);
+    const baseLayers = frame.document.querySelectorAll('.leaflet-control-layers-base input');
+    assert(baseLayers.length === 2, 'Configured MapTiler key did not enable the satellite base layer.');
+    passed.push('App offers satellite imagery alongside OSM with a configured key');
     const change = (id, value) => {
       control(id).value = value;
       control(id).dispatchEvent(new frame.Event('change', { bubbles: true }));
