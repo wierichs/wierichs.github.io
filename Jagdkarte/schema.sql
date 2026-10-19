@@ -63,31 +63,6 @@ create table if not exists public.hunting_user_profiles (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.hunting_temporary_marker_types (
-  type_id text primary key check (type_id ~ '^[a-z0-9][a-z0-9_-]{0,39}$'),
-  requires_current_location boolean not null default true,
-  editors_only boolean not null default false
-);
-insert into public.hunting_temporary_marker_types (type_id, requires_current_location, editors_only)
-  values ('anschuss', true, false), ('wildsichtung', true, false), ('standplatz', false, true)
-  on conflict (type_id) do nothing;
-alter table public.hunting_temporary_marker_types enable row level security;
-drop policy if exists "Marker rules are public" on public.hunting_temporary_marker_types;
-create policy "Marker rules are public" on public.hunting_temporary_marker_types
-  for select to anon, authenticated using (true);
-revoke all on public.hunting_temporary_marker_types from public, anon, authenticated;
-grant select on public.hunting_temporary_marker_types to anon, authenticated;
-
-create or replace function public.is_temporary_hunting_marker(p_type_id text)
-returns boolean
-language sql stable security definer
-set search_path = ''
-as $$
-  select exists (select 1 from public.hunting_temporary_marker_types where type_id = p_type_id);
-$$;
-revoke all on function public.is_temporary_hunting_marker(text) from public, anon, authenticated;
-grant execute on function public.is_temporary_hunting_marker(text) to authenticated;
-
 alter table public.hunting_markers
   add column if not exists type_id text not null default 'sonstiges'
   check (type_id ~ '^[a-z0-9][a-z0-9_-]{0,39}$');
@@ -96,7 +71,7 @@ alter table public.hunting_profiles add column if not exists boundary_geojson js
 alter table public.hunting_profiles add column if not exists hunting_mode boolean not null default false;
 alter table public.hunting_markers add column if not exists expires_at timestamptz;
 update public.hunting_markers set expires_at = created_at + interval '48 hours'
-  where public.is_temporary_hunting_marker(type_id) and expires_at is null;
+  where type_id in ('anschuss', 'wildsichtung', 'standplatz') and expires_at is null;
 
 create index if not exists hunting_markers_expiry_idx on public.hunting_markers(expires_at)
   where expires_at is not null;
@@ -260,86 +235,13 @@ begin
 end;
 $$;
 
-create or replace function public.import_hunting_profile(
-  p_profile_id uuid, p_feature_id text, p_district_name text, p_geometry jsonb, p_facilities jsonb
-)
-returns jsonb
-language plpgsql security definer
-set search_path = ''
-as $$
-declare
-  target_profile_id uuid;
-  target_geojson jsonb;
-  target_geometry extensions.geometry;
-  created_profile public.hunting_profiles;
-  facility record;
-  inserted_count integer := 0;
-  duplicate_count integer := 0;
-  outside_count integer := 0;
-begin
-  if auth.uid() is null then raise exception 'Anmeldung erforderlich'; end if;
-  if p_facilities is null or pg_catalog.jsonb_typeof(p_facilities) <> 'array'
-    or pg_catalog.octet_length(p_facilities::text) > 10 * 1024 * 1024 then
-    raise exception 'Ungueltige Einrichtungsliste';
-  end if;
-  if p_profile_id is null then
-    created_profile := public.create_hunting_profile('user-imports', p_feature_id, p_district_name);
-    target_profile_id := created_profile.id;
-    perform public.set_hunting_profile_boundary(target_profile_id, p_geometry);
-  else
-    if not public.can_edit_hunting_profile(p_profile_id) then
-      raise exception 'Nur Owner und Bearbeiter duerfen Einrichtungen importieren';
-    end if;
-    target_profile_id := p_profile_id;
-  end if;
-  select boundary_geojson into target_geojson from public.hunting_profiles
-    where id = target_profile_id for update;
-  if target_geojson is null then raise exception 'Die bestehende Reviergrenze ist nicht hinterlegt'; end if;
-  target_geometry := extensions.st_setsrid(extensions.st_geomfromgeojson(target_geojson::text), 4326);
-  for facility in
-    select * from pg_catalog.jsonb_to_recordset(p_facilities)
-      as entry(type_id text, title text, notes text, latitude double precision, longitude double precision)
-  loop
-    if facility.type_id is null or facility.type_id !~ '^[a-z0-9][a-z0-9_-]{0,39}$'
-      or public.is_temporary_hunting_marker(facility.type_id)
-      or facility.title is null or length(facility.title) not between 1 and 80
-      or length(coalesce(facility.notes, '')) > 300
-      or facility.latitude is null or facility.longitude is null
-      or not (facility.latitude between -90 and 90 and facility.longitude between -180 and 180) then
-      raise exception 'Ungueltige dauerhafte Einrichtung';
-    end if;
-    if p_profile_id is not null and not extensions.st_covers(target_geometry,
-      extensions.st_setsrid(extensions.st_makepoint(facility.longitude, facility.latitude), 4326)) then
-      outside_count := outside_count + 1;
-      continue;
-    end if;
-    if exists (
-      select 1 from public.hunting_markers marker where marker.profile_id = target_profile_id
-        and marker.type_id = facility.type_id
-        and lower(normalize(btrim(marker.title), NFKC)) = lower(normalize(btrim(facility.title), NFKC))
-        and floor(marker.latitude * 1e6 + 0.5) = floor(facility.latitude * 1e6 + 0.5)
-        and floor(marker.longitude * 1e6 + 0.5) = floor(facility.longitude * 1e6 + 0.5)
-    ) then
-      duplicate_count := duplicate_count + 1;
-      continue;
-    end if;
-    insert into public.hunting_markers (profile_id, type_id, title, notes, latitude, longitude, created_by)
-      values (target_profile_id, facility.type_id, facility.title, coalesce(facility.notes, ''),
-        facility.latitude, facility.longitude, auth.uid());
-    inserted_count := inserted_count + 1;
-  end loop;
-  return pg_catalog.jsonb_build_object('profile_id', target_profile_id, 'inserted_count', inserted_count,
-    'duplicate_count', duplicate_count, 'outside_count', outside_count);
-end;
-$$;
-
 create or replace function public.set_hunting_marker_expiry()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
-  if public.is_temporary_hunting_marker(new.type_id) then
+  if new.type_id in ('anschuss', 'wildsichtung', 'standplatz') then
     new.created_at := now();
     new.expires_at := new.created_at + interval '48 hours';
   else
@@ -366,23 +268,21 @@ declare
   district_geojson jsonb;
   district_geometry extensions.geometry;
   created_marker public.hunting_markers;
-  marker_rule public.hunting_temporary_marker_types;
 begin
   if auth.uid() is null or not public.can_view_hunting_profile(p_profile_id) then
     raise exception 'Nur Owner und eingeladene Mitglieder duerfen Meldungen setzen';
   end if;
-  select * into marker_rule from public.hunting_temporary_marker_types where type_id = p_type_id;
-  if not found then
+  if p_type_id is null or p_type_id not in ('anschuss', 'wildsichtung', 'standplatz') then
     raise exception 'Ungueltige temporaere Meldungsart';
   end if;
-  if marker_rule.editors_only and not public.can_edit_hunting_profile(p_profile_id) then
+  if p_type_id = 'standplatz' and not public.can_edit_hunting_profile(p_profile_id) then
     raise exception 'Nur Owner und Bearbeiter duerfen Standplaetze setzen';
   end if;
   if p_latitude is null or p_longitude is null
     or not (p_latitude between -90 and 90 and p_longitude between -180 and 180) then
     raise exception 'Ungueltige Koordinaten';
   end if;
-  if marker_rule.requires_current_location and (p_user_latitude is null or p_user_longitude is null
+  if p_type_id <> 'standplatz' and (p_user_latitude is null or p_user_longitude is null
     or not (p_user_latitude between -90 and 90 and p_user_longitude between -180 and 180)) then
     raise exception 'Ungueltige Koordinaten';
   end if;
@@ -391,7 +291,7 @@ begin
     raise exception 'Der Owner muss dieses Profil einmal oeffnen, um die Reviergrenze zu hinterlegen';
   end if;
   district_geometry := extensions.st_setsrid(extensions.st_geomfromgeojson(district_geojson::text), 4326);
-  if marker_rule.requires_current_location and not extensions.st_covers(district_geometry,
+  if p_type_id <> 'standplatz' and not extensions.st_covers(district_geometry,
       extensions.st_setsrid(extensions.st_makepoint(p_user_longitude, p_user_latitude), 4326)) then
     raise exception 'Dein aktueller Standort liegt ausserhalb des Reviers';
   end if;
@@ -512,7 +412,7 @@ create policy "Markers visible to profile members" on public.hunting_markers
 drop policy if exists "Profile owner can create markers" on public.hunting_markers;
 create policy "Profile owner can create markers" on public.hunting_markers
   for insert to authenticated with check (public.can_edit_hunting_profile(profile_id)
-    and not public.is_temporary_hunting_marker(type_id) and expires_at is null
+    and type_id not in ('anschuss', 'wildsichtung', 'standplatz') and expires_at is null
     and created_by = (select auth.uid()));
 drop policy if exists "Profile owner can delete markers" on public.hunting_markers;
 create policy "Profile owner can delete markers" on public.hunting_markers
@@ -520,7 +420,7 @@ create policy "Profile owner can delete markers" on public.hunting_markers
 drop policy if exists "Members can delete their own temporary markers" on public.hunting_markers;
 create policy "Members can delete their own temporary markers" on public.hunting_markers
   for delete to authenticated using (public.can_view_hunting_profile(profile_id)
-    and public.is_temporary_hunting_marker(type_id) and created_by = (select auth.uid()));
+    and type_id in ('anschuss', 'wildsichtung', 'standplatz') and created_by = (select auth.uid()));
 
 drop policy if exists "Owners can view profile locations" on public.hunting_profile_locations;
 drop policy if exists "Profile members can view locations" on public.hunting_profile_locations;
@@ -576,7 +476,5 @@ revoke all on function public.create_temporary_hunting_marker(uuid, text, text, 
   double precision, double precision, double precision, double precision) from public, anon, authenticated;
 revoke all on function public.delete_expired_hunting_markers() from public, anon, authenticated;
 grant execute on function public.set_hunting_profile_boundary(uuid, jsonb) to authenticated;
-revoke all on function public.import_hunting_profile(uuid, text, text, jsonb, jsonb) from public, anon, authenticated;
-grant execute on function public.import_hunting_profile(uuid, text, text, jsonb, jsonb) to authenticated;
 grant execute on function public.create_temporary_hunting_marker(uuid, text, text, text,
   double precision, double precision, double precision, double precision) to authenticated;

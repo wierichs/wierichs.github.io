@@ -89,6 +89,9 @@ export async function initializeAppFixture() {
 }
 
 export async function runAppTests() {
+  const profileStorageKey = 'jagdkarte-last-profile-v1';
+  const previousProfileChoice = localStorage.getItem(profileStorageKey);
+  localStorage.removeItem(profileStorageKey);
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;left:-10000px;width:1200px;height:800px;border:0';
   iframe.src = './tests.html?app-fixture';
@@ -155,5 +158,7 @@ export async function runAppTests() {
     return passed;
   } finally {
     iframe.remove();
+    if (previousProfileChoice === null) localStorage.removeItem(profileStorageKey);
+    else localStorage.setItem(profileStorageKey, previousProfileChoice);
   }
 }

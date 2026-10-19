@@ -1,5 +1,5 @@
-const CACHE = 'jagdkarte-shell-v66';
-const SHELL = ['./', './index.html', './hilfe.html', './hilfe.js', './style.css', './app.js', './data.js', './geometry.js', './profile-data.js', './config.js',
+const CACHE = 'jagdkarte-shell-v63';
+const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './config.js',
   './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
   './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/leiter.svg',
   './markers/kanzel.svg', './markers/drueckjagdbock.svg', './markers/kirrung.svg', './markers/sonstiges.svg',
@@ -47,8 +47,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(async () =>
-      await caches.match(event.request) || caches.match(new URL('./index.html', self.location).href)));
+    event.respondWith(fetch(event.request).catch(() => caches.match(new URL('./index.html', self.location).href)));
   } else if (url.pathname === markerCatalogUrl.pathname ||
     (url.pathname.startsWith(markerBaseUrl.pathname) && url.pathname.endsWith('.svg'))) {
     event.respondWith(networkFirst(event.request));
