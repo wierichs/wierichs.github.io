@@ -1,7 +1,7 @@
 window.JAGDKARTE_CONFIG = {
   supabaseUrl: 'https://qgtgeawsdxynnqsuanbl.supabase.co',
   supabasePublishableKey: 'sb_publishable_McuMiwcFEHR1V6QjOksZPA_8OzhaYtX',
-  mapTilerApiKey: '',
+  mapTilerApiKey: 'ctOD48ChgzxnvYtoAeSu',
   markerTypesUrl: './marker-types.json',
   sources: [{
     id: 'bielefeld',
