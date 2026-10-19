@@ -145,4 +145,12 @@ dialog::backdrop { background: #152a2260; }
   h1 { font-size: 23px; margin-bottom: 16px; } #results { max-height: 200px; }
   .map-legend { bottom: 35px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
 }
+@media (max-width: 700px) and (orientation: landscape) {
+  main { grid-template-columns: minmax(220px, 34vw) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  main.search-collapsed { grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: minmax(220px, 34vw) minmax(0, 1fr); }
+  aside { grid-row: 1; grid-column: 1; }
+  main.search-collapsed aside { padding: 6px; }
+  .map-surface { grid-row: 1; grid-column: 2; }
+}
 @media (prefers-reduced-motion: no-preference) { aside { animation: reveal .35s ease-out; } @keyframes reveal { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } } }
