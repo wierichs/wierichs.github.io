@@ -93,6 +93,14 @@ const profileLocations = L.layerGroup().addTo(map);
 
 window.lucide?.createIcons();
 new ResizeObserver(() => map.invalidateSize()).observe(element('map'));
+element('toggle-map-legend').addEventListener('click', () => {
+  const collapsed = !element('map-key').hidden;
+  element('map-key').hidden = collapsed;
+  const label = collapsed ? 'Legende anzeigen' : 'Legende ausblenden';
+  element('toggle-map-legend').setAttribute('aria-expanded', String(!collapsed));
+  element('toggle-map-legend').setAttribute('aria-label', label);
+  element('toggle-map-legend').title = label;
+});
 element('toggle-search-panel').addEventListener('click', () => {
   const collapsed = element('app-layout').classList.toggle('search-collapsed');
   const label = collapsed ? 'Reviersuche aufklappen' : 'Reviersuche einklappen';

@@ -125,6 +125,14 @@ export async function runAppTests() {
     satelliteButton.click();
     assert(satelliteButton.getAttribute('aria-pressed') === 'false', 'Satellite switch did not return to OSM.');
     passed.push('App offers satellite imagery alongside OSM with a configured key');
+    const legendButton = control('toggle-map-legend');
+    legendButton.click();
+    assert(control('map-key').hidden && legendButton.getAttribute('aria-expanded') === 'false' &&
+      legendButton.getAttribute('aria-label') === 'Legende anzeigen', 'Legend did not collapse accessibly.');
+    legendButton.click();
+    assert(!control('map-key').hidden && legendButton.getAttribute('aria-expanded') === 'true' &&
+      legendButton.getAttribute('aria-label') === 'Legende ausblenden', 'Legend did not expand accessibly.');
+    passed.push('App legend can be collapsed and expanded accessibly');
     const change = (id, value) => {
       control(id).value = value;
       control(id).dispatchEvent(new frame.Event('change', { bubbles: true }));

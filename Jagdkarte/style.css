@@ -99,7 +99,9 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #map { width: 100%; height: 100%; }
 .map-toolbar { position: absolute; right: 16px; top: 16px; z-index: 500; display: flex; gap: 8px; }
 .map-toolbar button { box-shadow: 0 2px 8px #20342826; }
-.map-key { position: absolute; left: 16px; bottom: 28px; z-index: 500; max-width: calc(100% - 32px); padding: 8px 12px; background: #fffffff0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; pointer-events: none; }
+.map-legend { position: absolute; left: 16px; bottom: 28px; z-index: 500; max-width: calc(100% - 32px); display: flex; align-items: flex-end; gap: 8px; }
+.map-legend button { box-shadow: 0 2px 8px #20342826; }
+.map-key { max-width: 100%; padding: 8px 12px; background: #fffffff0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; pointer-events: none; }
 .boundary-swatch { width: 22px; height: 12px; border: 2px solid var(--accent); background: #c43b5520; }
 .profile-location-marker.leaflet-div-icon { border: 0; background: transparent; }
 .person-location-swatch { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 2px solid white; border-radius: 50%; background: var(--green); color: white; box-shadow: 0 1px 5px #20342880; }
@@ -141,6 +143,6 @@ dialog::backdrop { background: #152a2260; }
   #toggle-search-panel svg { transform: none; }
   .map-surface { grid-row: 1; } aside { grid-row: 2; padding: 18px; border-right: 0; border-top: 1px solid var(--line); }
   h1 { font-size: 23px; margin-bottom: 16px; } #results { max-height: 200px; }
-  .map-key { bottom: 35px; font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
+  .map-legend { bottom: 35px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
 }
 @media (prefers-reduced-motion: no-preference) { aside { animation: reveal .35s ease-out; } @keyframes reveal { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } } }
