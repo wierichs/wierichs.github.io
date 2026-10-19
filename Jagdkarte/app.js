@@ -1172,7 +1172,7 @@ function selectFeature(feature, button, preferredProfileId) {
   const source = currentSource();
   const featureId = selectedFeatureId();
   saveSelection(featureId && source.type !== 'profile-imports' ? { sourceId: source.id, featureId } : null);
-  boundary = L.geoJSON(feature, { style: { color: '#c43b55', weight: 3, fillColor: '#c43b55', fillOpacity: .14 } });
+  boundary = L.geoJSON(feature, { smoothFactor: 0, style: { color: '#c43b55', weight: 3, fillColor: '#c43b55', fillOpacity: .14 } });
   if (element('show-boundary').checked) boundary.addTo(map);
   map.fitBounds(boundary.getBounds(), { padding: [24, 24], maxZoom: 16 });
   element('selected-name').textContent = featureName(feature, source);

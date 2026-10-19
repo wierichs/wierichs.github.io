@@ -210,14 +210,14 @@ rail so the map can use the free space. The toggle supports keyboard activation
 and exposes its expanded state to assistive technology.
 
 **Rhein-Kreis Neuss** is also available as a local, searchable snapshot of
-140 district polygons, retrieved on 2026-10-08. Its public portal provides WMS
-GetFeatureInfo in JSON, but no advertised hunting-district WFS collection. A
-browser request from the app origin was verified on 2026-10-09. GetFeatureInfo
-returns only features around the requested map pixel, not a complete collection;
-large query buffers can fail. The snapshot therefore avoids repeating dozens of
-sampling requests for every user and does not pretend to be a live feed. The app
-shows its retrieval date, district name, and area in hectares. Its source terms
-apply DL-DE-Zero-2.0 to this layer:
+140 district polygons. Its public portal provides WMS GetFeatureInfo in JSON,
+but no advertised hunting-district WFS collection. GetFeatureInfo returns only
+features around the requested map pixel, not a complete collection. Its geometry
+is also simplified according to the requested map scale: the refresh first
+discovers feature IDs with county-wide sampling, then queries each polygon again
+in a portal-scale window. The snapshot avoids repeating these requests for every
+user and does not pretend to be a live feed. The app shows its retrieval date,
+district name, and area in hectares. Source terms apply DL-DE-Zero-2.0 to this layer:
 https://maps.rhein-kreis-neuss.de/rknportale/Nutzungsbestimmungen.html
 
 The source is `https://maps.rhein-kreis-neuss.de/services/RKN_Jagdbezirke/wms`,
@@ -272,10 +272,11 @@ Refresh from the repository root with PowerShell:
 
 The script validates feature IDs, polygon geometry, geographic coordinates,
 feature limits, and agreement between the two grids before replacing
-`neuss.geojson`. It makes 106 sequential, read-only requests; refresh only when
-needed. On a failed check, the existing snapshot is preserved. After refreshing,
-update `snapshotDate` in `config.js` and increment the cache version in `sw.js`.
-The generated GeoJSON retains retrieval time, attribution, source, and terms.
+`neuss.geojson`. It makes 106 discovery requests plus one detail request per
+district (246 requests for the current 140 features); refresh only when needed.
+On a failed check, the existing snapshot is preserved. After refreshing, update
+`snapshotDate` in `config.js` and increment the cache version in `sw.js`. The
+generated GeoJSON retains retrieval time, attribution, source, and terms.
 
 - Dataset: https://www.bielefeld01.de/mdOLKD/Daten/jagdreviere_pl?FORMAT=HTML_Daten
 - WFS: https://bielefeld01.de/mdOLKD/WFS/jagdreviere/01

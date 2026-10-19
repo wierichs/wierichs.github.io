@@ -7,6 +7,11 @@ $ErrorActionPreference = 'Stop'
 $serviceUrl = 'https://maps.rhein-kreis-neuss.de/services/RKN_Jagdbezirke/wms'
 $termsUrl = 'https://maps.rhein-kreis-neuss.de/rknportale/Nutzungsbestimmungen.html'
 $limit = 10000
+$mapWidth = 2619
+$mapHeight = 1770
+$refinementHalfWidth = 0.10
+$refinementHalfHeight = 0.042
+$invariantCulture = [Globalization.CultureInfo]::InvariantCulture
 $featuresById = @{}
 $previousIds = $null
 
@@ -78,6 +83,59 @@ foreach ($gridSize in @(5, 9)) {
     Write-Output "$gridSize x $gridSize grid: $($ids.Count) district polygons verified."
 }
 
+foreach ($featureId in @($featuresById.Keys)) {
+    $coarseFeature = $featuresById[$featureId]
+    $coordinate = if ($coarseFeature.geometry.type -eq 'MultiPolygon') {
+        $coarseFeature.geometry.coordinates[0][0][0]
+    } else {
+        $coarseFeature.geometry.coordinates[0][0]
+    }
+    $longitude = [double]$coordinate[0]
+    $latitude = [double]$coordinate[1]
+    $bbox = @(
+        ($longitude - $refinementHalfWidth).ToString('0.00000000', $invariantCulture)
+        ($latitude - $refinementHalfHeight).ToString('0.00000000', $invariantCulture)
+        ($longitude + $refinementHalfWidth).ToString('0.00000000', $invariantCulture)
+        ($latitude + $refinementHalfHeight).ToString('0.00000000', $invariantCulture)
+    ) -join ','
+    $parameters = [ordered]@{
+        SERVICE = 'WMS'
+        VERSION = '1.1.1'
+        REQUEST = 'GetFeatureInfo'
+        LAYERS = 'jagdbezirke'
+        QUERY_LAYERS = 'jagdbezirke'
+        STYLES = ''
+        FORMAT = 'image/png'
+        SRS = 'EPSG:4326'
+        BBOX = $bbox
+        WIDTH = [string]$mapWidth
+        HEIGHT = [string]$mapHeight
+        X = [string][int][Math]::Floor($mapWidth / 2)
+        Y = [string][int][Math]::Floor($mapHeight / 2)
+        buffer = '400'
+        INFO_FORMAT = 'application/json'
+        FEATURE_COUNT = [string]$limit
+    }
+    $query = ($parameters.GetEnumerator() | ForEach-Object {
+        '{0}={1}' -f [Uri]::EscapeDataString($_.Key), [Uri]::EscapeDataString($_.Value)
+    }) -join '&'
+    $response = Invoke-WebRequest -Uri ($serviceUrl + '?' + $query) -TimeoutSec 60
+    $content = if ($response.Content -is [byte[]]) {
+        [Text.Encoding]::UTF8.GetString($response.Content)
+    } else {
+        $response.Content
+    }
+    $collection = $content | ConvertFrom-Json
+    if ($collection.type -ne 'FeatureCollection' -or $collection.features.Count -ge $limit) {
+        throw "The detailed query for $featureId returned an invalid or truncated feature collection."
+    }
+    $refinedFeature = $collection.features | Where-Object { [string]$_.id -eq [string]$featureId } | Select-Object -First 1
+    if (-not $refinedFeature -or $refinedFeature.geometry.type -notin @('Polygon', 'MultiPolygon')) {
+        throw "The detailed query did not return polygon $featureId; the existing snapshot was not changed."
+    }
+    $featuresById[$featureId] = $refinedFeature
+}
+
 $snapshot = [ordered]@{
     type = 'FeatureCollection'
     name = 'Rhein-Kreis Neuss Jagdbezirke'
@@ -88,7 +146,7 @@ $snapshot = [ordered]@{
     licenseUrl = 'https://www.govdata.de/dl-de/zero-2-0'
     termsUrl = $termsUrl
     retrievedAt = [DateTime]::UtcNow.ToString('o')
-    coverage = '5x5 and 9x9 county-wide WMS sampling grids returned matching IDs; publisher completeness is not guaranteed.'
+    coverage = '5x5 and 9x9 WMS grids returned matching IDs; each polygon was then queried in a portal-scale window. Publisher completeness is not guaranteed.'
     features = @($featuresById.Values | Sort-Object { $_.properties.jagdbezirk }, { $_.id })
 }
 $json = $snapshot | ConvertTo-Json -Depth 100

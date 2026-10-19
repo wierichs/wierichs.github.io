@@ -81,7 +81,7 @@ window.JAGDKARTE_CONFIG = {
     label: 'Rhein-Kreis Neuss, Nordrhein-Westfalen (Snapshot)',
     type: 'snapshot',
     url: './neuss.geojson',
-    snapshotDate: '2026-10-08',
+    snapshotDate: '2026-10-19',
     nameFields: ['jagdbezirk'],
     attribution: 'Rhein-Kreis Neuss, Kataster- und Vermessungsamt',
     license: 'DL-DE-Zero-2.0',
