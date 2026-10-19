@@ -116,8 +116,14 @@ export async function runAppTests() {
     const frame = iframe.contentWindow;
     const state = frame.jagdkarteTest;
     const control = id => frame.document.getElementById(id);
-    const baseLayers = frame.document.querySelectorAll('.leaflet-control-layers-base input');
-    assert(baseLayers.length === 2, 'Configured MapTiler key did not enable the satellite base layer.');
+    const satelliteButton = control('toggle-satellite');
+    assert(!satelliteButton.hidden && !frame.document.querySelector('.leaflet-control-layers'),
+      'MapTiler should use only the direct satellite toolbar switch.');
+    satelliteButton.click();
+    assert(satelliteButton.getAttribute('aria-pressed') === 'true' &&
+      frame.document.querySelector('.maptiler-attribution-logo'), 'Satellite switch did not activate the basemap.');
+    satelliteButton.click();
+    assert(satelliteButton.getAttribute('aria-pressed') === 'false', 'Satellite switch did not return to OSM.');
     passed.push('App offers satellite imagery alongside OSM with a configured key');
     const change = (id, value) => {
       control(id).value = value;

@@ -14,6 +14,7 @@ const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
 const mapTilerApiKey = typeof config.mapTilerApiKey === 'string' ? config.mapTilerApiKey.trim() : '';
+const satelliteViewButton = element('toggle-satellite');
 if (mapTilerApiKey) {
   const satelliteTiles = L.tileLayer(
     `https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.jpg?key=${encodeURIComponent(mapTilerApiKey)}`,
@@ -31,7 +32,14 @@ if (mapTilerApiKey) {
     showMapStatus('Satellitenkarte nicht verfuegbar. API-Key und Verbindung pruefen.', 'error');
     satelliteTileWarningShown = true;
   });
-  L.control.layers({ OpenStreetMap: tiles, Satellit: satelliteTiles }, null, { position: 'topleft' }).addTo(map);
+  satelliteViewButton.hidden = false;
+  satelliteViewButton.addEventListener('click', () => {
+    const satelliteEnabled = !map.hasLayer(satelliteTiles);
+    const nextLayer = satelliteEnabled ? satelliteTiles : tiles;
+    map.removeLayer(satelliteEnabled ? tiles : satelliteTiles);
+    nextLayer.addTo(map);
+    map.fire('baselayerchange', { layer: nextLayer, name: satelliteEnabled ? 'Satellit' : 'OpenStreetMap' });
+  });
 }
 L.control.scale({ imperial: false }).addTo(map);
 let user = null;
@@ -97,6 +105,11 @@ element('toggle-search-panel').addEventListener('click', () => {
 });
 map.on('baselayerchange', event => {
   if (event.name === 'Satellit') satelliteTileWarningShown = false;
+  const satelliteEnabled = event.name === 'Satellit';
+  const label = satelliteEnabled ? 'Straßenkarte anzeigen' : 'Satellitenansicht anzeigen';
+  satelliteViewButton.setAttribute('aria-pressed', String(satelliteEnabled));
+  satelliteViewButton.setAttribute('aria-label', label);
+  satelliteViewButton.title = label;
 });
 tiles.on('tileerror', () => {
   if (!tileWarningShown) {
