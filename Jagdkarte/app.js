@@ -663,7 +663,12 @@ async function loadProfileMarkers() {
     if (canEditProfile(activeProfile)) {
       const move = document.createElement('button');
       move.type = 'button';
-      move.textContent = 'Auf meinen Standort verschieben';
+      move.setAttribute('aria-label', 'Auf aktuelle Position verschieben');
+      move.title = 'Auf aktuelle Position verschieben';
+      const moveIcon = document.createElement('i');
+      moveIcon.setAttribute('data-lucide', 'locate-fixed');
+      moveIcon.setAttribute('aria-hidden', 'true');
+      move.append(moveIcon);
       move.addEventListener('click', () => {
         if (!navigator.geolocation) {
           profileStatus('Standortbestimmung im Browser nicht verfuegbar.');
@@ -717,7 +722,12 @@ async function loadProfileMarkers() {
     if (canEditProfile(activeProfile) || (type.temporary && marker.created_by === user.id)) {
       const remove = document.createElement('button');
       remove.type = 'button';
-      remove.textContent = 'Markierung loeschen';
+      remove.setAttribute('aria-label', 'Markierung loeschen');
+      remove.title = 'Markierung loeschen';
+      const removeIcon = document.createElement('i');
+      removeIcon.setAttribute('data-lucide', 'trash-2');
+      removeIcon.setAttribute('aria-hidden', 'true');
+      remove.append(removeIcon);
       remove.addEventListener('click', async () => {
         const { error: deleteError } = await supabaseClient.from('hunting_markers').delete().eq('id', marker.id);
         if (deleteError) profileStatus(`Markierung konnte nicht geloescht werden: ${deleteError.message}`);
@@ -736,6 +746,7 @@ async function loadProfileMarkers() {
         title: type.label
       })
     }).bindPopup(popup);
+    mapMarker.on('popupopen', () => window.lucide?.createIcons({ root: popup }));
     mapMarker.on('add', () => {
       const iconElement = mapMarker.getElement();
       if (iconElement) iconElement.setAttribute('aria-label', type.label);

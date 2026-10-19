@@ -92,7 +92,7 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .profile-marker-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
 .profile-location-popup strong, .profile-location-popup span { display: block; overflow-wrap: anywhere; }
 .profile-location-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
-.profile-marker-popup button { max-width: 100%; margin-top: 9px; min-height: 32px; padding: 5px 8px; font-size: 12px; white-space: normal; }
+.profile-marker-popup button { width: 36px; height: 36px; max-width: 100%; flex: 0 0 36px; gap: 0; margin-top: 9px; min-height: 36px; padding: 8px; }
 .source-note { margin-top: auto; padding-top: 24px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .source-note span { flex-basis: 100%; }
 .map-surface { position: relative; min-height: 0; background: #e6ece8; }

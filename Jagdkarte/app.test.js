@@ -161,9 +161,14 @@ export async function runAppTests() {
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
     await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
-      .some(button => button.textContent === 'Auf meinen Standort verschieben'));
+      .some(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben'));
     const moveButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
-      .find(button => button.textContent === 'Auf meinen Standort verschieben');
+      .find(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben');
+    const removeButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .find(button => button.getAttribute('aria-label') === 'Markierung loeschen');
+    assert(moveButton.title === 'Auf aktuelle Position verschieben' && moveButton.querySelector('svg') &&
+      moveButton.textContent.trim() === '' && removeButton?.title === 'Markierung loeschen' && removeButton.querySelector('svg'),
+    'Marker popup actions should render as accessible icon-only buttons.');
     moveButton.click();
     await waitFor(() => state.moveRequests.length === 1);
     assert(state.moveRequests[0].p_marker_id === 'test-marker' && state.moveRequests[0].p_latitude === 49.5 &&
@@ -173,9 +178,9 @@ export async function runAppTests() {
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
     await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
-      .some(button => button.textContent === 'Auf meinen Standort verschieben'));
+      .some(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben'));
     Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
-      .find(button => button.textContent === 'Auf meinen Standort verschieben').click();
+      .find(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben').click();
     await waitFor(() => control('profile-status').textContent.includes('ausserhalb des Reviers'));
     assert(state.moveRequests.length === 1, 'Marker move outside the district reached the database.');
     state.currentPosition = { latitude: 49.5, longitude: 6.5 };
@@ -218,7 +223,7 @@ export async function runAppTests() {
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
     await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
-      .some(button => button.textContent === 'Auf meinen Standort verschieben'));
+      .some(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben'));
     passed.push('Owner can move a marker from the popup');
     state.holdMode = true;
     control('hunting-mode').checked = false;
