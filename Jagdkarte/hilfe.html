@@ -54,6 +54,8 @@
           <dl class="help-tools">
             <div><dt><i data-lucide="log-in" aria-hidden="true"></i>Anmelden / Abmelden</dt><dd>Pfeil in einen Rahmen, oben rechts: &ouml;ffnet die Anmeldung. Wenn du angemeldet bist, meldet dich diese Schaltfl&auml;che ab.</dd></div>
             <div><dt><i data-lucide="locate-fixed" aria-hidden="true"></i>Mein Standort</dt><dd>Zielscheibe: zeigt deinen Standort auf der Karte. Dein Smartphone fragt gegebenenfalls nach deiner Erlaubnis.</dd></div>
+            <div><dt><i data-lucide="locate-fixed" aria-hidden="true"></i>Markierung verschieben</dt><dd>Zielscheibe im Marker-Popup: verschiebt die Markierung an deinen aktuellen Standort. Nur Verwalter und Bearbeiter sehen dieses Symbol. Der Standort muss innerhalb des Reviers liegen.</dd></div>
+            <div><dt><i data-lucide="trash-2" aria-hidden="true"></i>Markierung l&ouml;schen</dt><dd>Papierkorb im Marker-Popup: l&ouml;scht die Markierung, sofern du dazu berechtigt bist.</dd></div>
             <div><dt><i data-lucide="scan" aria-hidden="true"></i>Revier einpassen</dt><dd>Vier Ecken: zeigt das gew&auml;hlte Revier wieder ganz, wenn du die Karte verschoben hast.</dd></div>
             <div><dt><i data-lucide="expand" aria-hidden="true"></i>Vollbild</dt><dd>Pfeile nach au&szlig;en: vergr&ouml;&szlig;ert die Karte auf den ganzen Bildschirm. Mit den Pfeilen nach innen verl&auml;sst du diese Ansicht.</dd></div>
             <div><dt><i data-lucide="refresh-cw" aria-hidden="true"></i>Aktualisieren</dt><dd>Pfeil im Kreis neben einer Liste: l&auml;dt diese Liste neu. Auf der Karte bedeutet er, dass eine neue App-Version bereitsteht.</dd></div>
@@ -81,7 +83,7 @@
           <ol>
             <li>Melde dich an und tippe auf <strong>Auswahl</strong>.</li>
             <li>Tippe auf das gew&uuml;nschte Revier. Dort stehen deine eigenen Reviere und die Reviere, zu denen du eingeladen wurdest.</li>
-            <li>Falls eine Standortfreigabe abgefragt wird, lies den Hinweis und entscheide, ob du zustimmen m&ouml;chtest.</li>
+            <li>Wenn der Jagdmodus aktiv ist, kannst du in diesem Profil <strong>Standort mit diesem Revier teilen</strong> einschalten. Der Browser fragt gegebenenfalls separat nach Standortzugriff.</li>
           </ol>
           <p><strong>Eigen</strong> bedeutet: Du verwaltest diese Zusammenstellung. <strong>Gast</strong> und <strong>Bearbeiter</strong> bedeuten: Jemand hat dich eingeladen. Die Adresse hinter dem Zeichen <strong>@</strong> nennt den Verwalter des geteilten Reviers.</p>
           <h3>Ein eigenes Revierprofil anlegen</h3>
@@ -104,7 +106,8 @@
           </ol>
           <p><strong>Dauerhaft:</strong> Zum Beispiel Hochsitze, H&uuml;tten oder Kirrungen. Sie bleiben gespeichert, bis sie gel&ouml;scht werden. Nur Verwalter und Bearbeiter k&ouml;nnen sie anlegen.</p>
           <p><strong>F&uuml;r 48 Stunden:</strong> Anschuss, Wildsichtung und Standplatz verschwinden automatisch nach zwei Tagen. F&uuml;r Anschuss und Wildsichtung muss dein aktueller Smartphone-Standort im Revier liegen. Auch eingeladene G&auml;ste d&uuml;rfen diese beiden Meldungen setzen. Standpl&auml;tze k&ouml;nnen nur Verwalter und Bearbeiter planen; daf&uuml;r m&uuml;ssen sie nicht selbst vor Ort sein.</p>
-          <p>Tippe auf ein Symbol auf der Karte, um Bezeichnung und Notiz zu lesen. Wenn dort <strong>Markierung loeschen</strong> erscheint, darfst du diese Markierung entfernen. G&auml;ste k&ouml;nnen ihre eigenen zeitlich begrenzten Meldungen l&ouml;schen; Verwalter und Bearbeiter alle Markierungen.</p>
+          <p>Tippe auf ein Symbol auf der Karte, um Bezeichnung und Notiz zu lesen. Der Papierkorb l&ouml;scht die Markierung, wenn du dazu berechtigt bist. G&auml;ste k&ouml;nnen ihre eigenen zeitlich begrenzten Meldungen l&ouml;schen; Verwalter und Bearbeiter alle Markierungen.</p>
+          <p>Verwalter und Bearbeiter k&ouml;nnen eine Markierung mit der Zielscheibe im Popup an ihren aktuellen Standort verschieben. Der Browser fragt gegebenenfalls nach Standortzugriff. Die Verschiebung klappt nur innerhalb der Reviergrenze.</p>
         </section>
         <section id="zusammenarbeiten">
           <h2>Andere einladen</h2>
@@ -125,11 +128,11 @@
           <p>Die Zielscheibe <strong>Mein Standort</strong> zeigt, wo du dich befindest. Diese Schaltfl&auml;che allein teilt deinen Standort nicht mit der Gruppe.</p>
           <h3>Den Standort mit der Reviergruppe teilen</h3>
           <p>Verwalter und Bearbeiter k&ouml;nnen den Haken bei <strong>Jagdmodus</strong> setzen. Ist der Jagdmodus aus, werden keine Gruppenstandorte angezeigt oder &uuml;bermittelt.</p>
-          <p>Beim Verwalter startet die Standortfreigabe im aktiven Jagdmodus, sofern der Browser sie erlaubt. Eingeladene Personen werden zuvor gefragt. Mit <strong>Zustimmen und fortfahren</strong> erlaubst du die Freigabe; mit <strong>Als Gast ansehen</strong> betrachtest du die Grenze ohne die gemeinsamen Profilmarkierungen.</p>
+          <p>Beim Verwalter startet die Standortabfrage im aktiven Jagdmodus, sofern der Browser den Zugriff erlaubt. Bei eingeladenen Personen erscheint im aktiven Jagdmodus die Checkbox <strong>Standort mit diesem Revier teilen</strong>. Erst wenn du sie einschaltest, fordert der Browser gegebenenfalls den Standortzugriff an. Ohne Haken kannst du das Revier und seine gemeinsamen Markierungen weiterhin ansehen, ohne deinen eigenen Standort zu teilen.</p>
           <ul>
             <li>Dein Standort wird nur innerhalb der ausgew&auml;hlten Reviergrenze &uuml;bermittelt und etwa alle 30 Sekunden erneuert.</li>
             <li>Die Mitglieder dieses Reviers k&ouml;nnen deinen Standort sehen, nicht beliebige andere Nutzer der App.</li>
-            <li>Zum Beenden w&auml;hle das Revier ab oder melde dich ab. Verwalter und Bearbeiter k&ouml;nnen auch den Jagdmodus ausschalten.</li>
+            <li>Zum Beenden entfernst du den Haken bei <strong>Standort mit diesem Revier teilen</strong>. Verwalter und Bearbeiter beenden die Freigabe mit dem Jagdmodus; Abw&auml;hlen oder Abmelden stoppt sie ebenfalls.</li>
             <li>Ohne Verbindung kann die letzte gespeicherte Position nicht sofort entfernt werden. Sie wird nach etwa 90 Sekunden nicht mehr auf der Gruppenkarte angezeigt.</li>
           </ul>
           <p>Lass die App f&uuml;r die Standortfreigabe ge&ouml;ffnet. Bei gesperrtem Bildschirm oder im Hintergrund kann dein Smartphone die Aktualisierung unterbrechen. Die Anzeige ist keine sichere Echtzeitortung.</p>
