@@ -17,10 +17,14 @@ export async function initializeAppFixture() {
     if (!state.user) return [];
     if (table === 'hunting_profiles') return [profile()];
     if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: 'guest' }];
+    if (table === 'hunting_profile_locations') return [{ profile_id: 'test-profile', user_id: 'member',
+      latitude: 49.5, longitude: 6.5, accuracy: 12,
+      updated_at: new Date(Date.now() - 15 * 60 * 1000).toISOString() }];
     return [];
   };
   const query = table => {
     const filters = [];
+    const minimums = [];
     let range = null;
     let single = false;
     let write = false;
@@ -28,14 +32,15 @@ export async function initializeAppFixture() {
       select() { return this; },
       eq(key, value) { filters.push([key, value]); return this; },
       is(key, value) { return this.eq(key, value); },
-      gte() { return this; },
+      gte(key, value) { minimums.push([key, value]); return this; },
       order() { return this; },
       range(start, end) { range = [start, end]; return this; },
       maybeSingle() { single = true; return this; },
       upsert() { write = true; return this; },
       delete() { write = true; return this; },
       then(resolve, reject) {
-        let data = write ? [] : rowsFor(table).filter(row => filters.every(([key, value]) => row[key] === value));
+        let data = write ? [] : rowsFor(table).filter(row => filters.every(([key, value]) => row[key] === value) &&
+          minimums.every(([key, value]) => row[key] >= value));
         if (range) data = data.slice(range[0], range[1] + 1);
         return Promise.resolve({ data: single ? data[0] || null : data, error: null }).then(resolve, reject);
       }
@@ -128,6 +133,8 @@ export async function runAppTests() {
     await waitFor(() => state.gpsRequests === 1);
     assert(control('profile-list').value === 'test-profile', 'Accepted consent did not activate the profile.');
     passed.push('App rechecks current hunting mode before GPS and requires explicit consent');
+    await waitFor(() => frame.document.querySelectorAll('.profile-location-marker').length === 1);
+    passed.push('App shows the last known participant position after a long pause');
 
     control('account-button').click();
     await waitFor(() => control('user-label').hidden);

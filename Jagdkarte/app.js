@@ -52,7 +52,7 @@ let markerIconSize = readMarkerIconSize();
 let locationInterval = null;
 let locationRequestPending = false;
 let sharingProfileId = null;
-let sharedLocationIsInBoundary = false;
+let sharedLocationIsInBoundary = null;
 let presenceInterval = null;
 let huntingModeInterval = null;
 let presenceRevision = 0;
@@ -652,7 +652,7 @@ function pauseProfileLocation() {
   locationInterval = null;
   locationRequestPending = false;
   sharingProfileId = null;
-  sharedLocationIsInBoundary = false;
+  sharedLocationIsInBoundary = null;
   if (presenceInterval !== null) clearInterval(presenceInterval);
   presenceInterval = null;
   presenceRevision += 1;
@@ -721,22 +721,21 @@ async function loadProfileLocations() {
     element('location-key').hidden = true;
     return;
   }
-  const freshAfter = new Date(Date.now() - 90000).toISOString();
   const profileId = activeProfile.id;
   const [{ data, error }, { data: participants, error: participantError }] = await Promise.all([
     supabaseClient.from('hunting_profile_locations')
       .select('user_id,latitude,longitude,accuracy,updated_at')
-      .eq('profile_id', profileId).gte('updated_at', freshAfter),
+      .eq('profile_id', profileId),
     supabaseClient.rpc('get_hunting_profile_participants', { p_profile_id: profileId })
   ]);
   if (revision !== presenceRevision || !activeProfile || !user) return;
-  profileLocations.clearLayers();
-  element('location-key').hidden = true;
   if (error) {
     element('presence-status').hidden = false;
     element('presence-status').textContent = `Standorte nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
     return;
   }
+  profileLocations.clearLayers();
+  element('location-key').hidden = true;
   const participantById = new Map((participantError ? [] : participants || [])
     .map(participant => [participant.participant_user_id, participant]));
   (data || []).forEach(location => {
@@ -776,7 +775,7 @@ async function loadProfileLocations() {
   element('location-key').hidden = !data?.length;
   element('presence-status').hidden = false;
   element('presence-status').textContent = data?.length
-    ? `${data.length} aktuelle Standortfreigabe${data.length === 1 ? '' : 'n'} im Revier.${participantError ? ' Namen und Rollen sind derzeit nicht verfuegbar.' : ''}`
+    ? `${data.length} letzte bekannte Position${data.length === 1 ? '' : 'en'} im Revier.${participantError ? ' Namen und Rollen sind derzeit nicht verfuegbar.' : ''}`
     : 'Aktuell keine Benutzer im Revier.';
 }
 
@@ -786,15 +785,11 @@ async function startProfileLocationSharing(profile) {
     return;
   }
   sharingProfileId = profile.id;
-  const { error: clearError } = await supabaseClient.from('hunting_profile_locations').delete()
-    .eq('profile_id', profile.id).eq('user_id', user.id);
-  if (sharingProfileId !== profile.id || !activeProfile?.hunting_mode) return;
-  if (clearError) profileStatus(`Vorherige Standortfreigabe konnte nicht entfernt werden: ${clearError.message}`);
   const updateSharedLocation = async position => {
     if (sharingProfileId !== profile.id || !user || !activeProfile?.hunting_mode) return;
     const point = { lat: position.coords.latitude, lng: position.coords.longitude };
     if (!pointInSelectedFeature(point)) {
-      if (sharedLocationIsInBoundary) {
+      if (sharedLocationIsInBoundary !== false) {
         sharedLocationIsInBoundary = false;
         const { error } = await supabaseClient.from('hunting_profile_locations').delete()
           .eq('profile_id', profile.id).eq('user_id', user.id);
