@@ -86,6 +86,11 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .display-name-row button { flex: 0 0 42px; }
 #display-name-status, #marker-icon-size-status { margin: 6px 0; color: var(--muted); font-size: 12px; }
 .profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.boundary-edit-handle.leaflet-div-icon { border: 0; background: transparent; }
+.boundary-edit-handle::after { position: absolute; inset: 3px; border: 2px solid #fff; border-radius: 50%; background: #c43b55; box-shadow: 0 1px 4px #17211788; content: ''; }
+.boundary-edit-midpoint::after { inset: 4px; background: #fff; border-color: #c43b55; }
+.boundary-edit-handle.leaflet-marker-draggable { cursor: grab; }
+.boundary-edit-handle.leaflet-marker-dragging { cursor: grabbing; }
 #invite-form, #marker-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .profile-marker-popup { min-width: 150px; }
 .profile-marker-popup strong, .profile-marker-popup span { display: block; overflow-wrap: anywhere; }
@@ -134,7 +139,7 @@ dialog::backdrop { background: #152a2260; }
 #login-form, #code-form { margin-top: 20px; }
 #login-form button, #code-form button { width: 100%; margin-top: 16px; }
 #login-status { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-#boundary-import-dialog select { width: 100%; margin: 8px 0 16px; }
+#boundary-import-dialog select, #boundary-import-dialog input { width: 100%; margin: 8px 0 16px; }
 @media (max-width: 700px) {
   .topbar { height: 60px; padding: 0 14px; gap: 10px; }
   .brand { font-size: 21px; } #user-label { display: block; flex: 0 1 96px; max-width: 96px; font-size: 10px; padding: 0; } .network { display: none; } .account { margin-left: auto; gap: 6px; }

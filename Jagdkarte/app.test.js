@@ -2,14 +2,18 @@ export async function initializeAppFixture() {
   const parsed = new DOMParser().parseFromString(await (await fetch('./index.html')).text(), 'text/html');
   document.body.replaceChildren(...parsed.body.childNodes);
   for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) document.head.append(stylesheet);
-  const geometry = { type: 'Polygon', coordinates: [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]]] };
   const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false,
     denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
+    boundaryRequests: [], createdProfiles: [], importedProfiles: [],
     currentPosition: { latitude: 49.5, longitude: 6.5 } };
+  state.boundaryGeometry = { type: 'MultiPolygon', coordinates: [
+    [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]], [[6.2, 49.2], [6.3, 49.2], [6.3, 49.3], [6.2, 49.3], [6.2, 49.2]]],
+    [[[8, 49], [9, 49], [9, 50], [8, 50], [8, 49]]]
+  ] };
   let authCallback = () => {};
   const profile = () => ({ id: 'test-profile', source_id: 'user-imports', feature_id: 'jwd-test',
     district_name: 'Privates Testrevier', owner_id: 'owner', created_at: '2026-01-01',
-    hunting_mode: state.mode, boundary_geojson: geometry });
+    hunting_mode: state.mode, boundary_geojson: state.boundaryGeometry });
   const rowsFor = table => {
     if (table === 'hunting_temporary_marker_types') return [
       { type_id: 'anschuss', requires_current_location: true, editors_only: false },
@@ -17,7 +21,7 @@ export async function initializeAppFixture() {
       { type_id: 'standplatz', requires_current_location: false, editors_only: true }
     ];
     if (!state.user) return [];
-    if (table === 'hunting_profiles') return [profile()];
+    if (table === 'hunting_profiles') return [profile(), ...state.importedProfiles];
     if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: state.memberRole }];
     if (table === 'hunting_markers') return [{ id: 'test-marker', profile_id: 'test-profile', type_id: state.markerType,
       title: 'Testmarker', notes: '', latitude: 49.6, longitude: 6.6, created_by: 'owner',
@@ -54,6 +58,24 @@ export async function initializeAppFixture() {
   const client = {
     from: query,
     rpc(name, parameters) {
+      if (name === 'set_hunting_profile_boundary') {
+        state.boundaryRequests.push(parameters);
+        if (parameters.p_profile_id === 'test-profile') state.boundaryGeometry = parameters.p_geometry;
+        else {
+          const importedProfile = state.importedProfiles.find(candidate => candidate.id === parameters.p_profile_id);
+          if (importedProfile) importedProfile.boundary_geojson = parameters.p_geometry;
+        }
+        return Promise.resolve({ data: null, error: null });
+      }
+      if (name === 'create_hunting_profile') {
+        const createdProfile = { id: `imported-profile-${state.createdProfiles.length + 1}`,
+          source_id: parameters.p_source_id, feature_id: parameters.p_feature_id,
+          district_name: parameters.p_district_name, owner_id: state.user.id,
+          created_at: '2026-10-20', hunting_mode: false, boundary_geojson: null };
+        state.createdProfiles.push(parameters);
+        state.importedProfiles.push(createdProfile);
+        return Promise.resolve({ data: createdProfile, error: null });
+      }
       if (name === 'change_hunting_marker_type') {
         state.typeChangeRequests.push(parameters);
         state.markerType = parameters.p_type_id;
@@ -87,6 +109,7 @@ export async function initializeAppFixture() {
     }
   };
   window.supabase = { createClient: () => client };
+  window.confirm = () => true;
   Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
     getCurrentPosition(success, error) {
       state.gpsRequests += 1;
@@ -165,6 +188,57 @@ export async function runAppTests() {
     state.mode = true;
     change('profile-list', 'test-profile');
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
+    assert(!control('edit-boundary').hidden, 'An editor should be able to edit an imported boundary.');
+    control('edit-boundary').click();
+    await waitFor(() => frame.document.querySelector('.boundary-edit-midpoint'));
+    frame.document.querySelector('.boundary-edit-midpoint').click();
+    assert(frame.document.querySelectorAll('.boundary-edit-midpoint').length === 13,
+      'Adding a midpoint should split the imported polygon edge.');
+    frame.document.querySelector('.boundary-edit-vertex').click();
+    assert(!control('remove-boundary-point').disabled, 'Selecting a boundary vertex should enable point removal.');
+    control('remove-boundary-point').click();
+    assert(frame.document.querySelectorAll('.boundary-edit-midpoint').length === 12,
+      'Removing a vertex should restore the original number of polygon edges.');
+    frame.document.querySelectorAll('.boundary-edit-vertex')[4].click();
+    assert(control('remove-boundary-part').querySelector('span').textContent === 'Innenfläche entfernen' &&
+      !control('remove-boundary-part').disabled, 'A selected interior ring should offer hole removal.');
+    control('remove-boundary-part').click();
+    assert(frame.document.querySelectorAll('.boundary-edit-midpoint').length === 8,
+      'Removing an interior ring should keep its exterior polygon.');
+    frame.document.querySelectorAll('.boundary-edit-part')[1]
+      .dispatchEvent(new frame.MouseEvent('click', { bubbles: true }));
+    assert(control('remove-boundary-part').querySelector('span').textContent === 'Teilfläche entfernen' &&
+      !control('remove-boundary-part').disabled, 'Selecting a MultiPolygon component should offer area removal.');
+    control('remove-boundary-part').click();
+    assert(frame.document.querySelectorAll('.boundary-edit-part').length === 1 &&
+      frame.document.querySelectorAll('.boundary-edit-midpoint').length === 4,
+    'Removing a MultiPolygon component should retain the remaining component.');
+    frame.document.querySelector('.boundary-edit-part')
+      .dispatchEvent(new frame.MouseEvent('click', { bubbles: true }));
+    assert(control('remove-boundary-part').disabled,
+      'The final remaining polygon component should not be removable.');
+    control('cancel-boundary').click();
+    assert(state.boundaryRequests.length === 1 && state.boundaryGeometry.coordinates.length === 2 &&
+      state.boundaryGeometry.coordinates[0].length === 2 &&
+      control('edit-boundary').hidden === false, 'Cancel should discard unsaved boundary changes.');
+    const importedSource = frame.JAGDKARTE_CONFIG.sources.find(source => source.id === 'user-imports');
+    importedSource.type = 'snapshot';
+    change('profile-list', 'test-profile');
+    await waitFor(() => control('edit-boundary').hidden);
+    importedSource.type = 'profile-imports';
+    change('profile-list', 'test-profile');
+    await waitFor(() => !control('edit-boundary').hidden);
+    control('edit-boundary').click();
+    await waitFor(() => frame.document.querySelector('.boundary-edit-midpoint'));
+    frame.document.querySelector('.boundary-edit-midpoint').click();
+    const boundaryRequestCount = state.boundaryRequests.length;
+    control('save-boundary').click();
+    await waitFor(() => state.boundaryRequests.length === boundaryRequestCount + 1 &&
+      control('profile-status').textContent === 'Reviergrenze gespeichert.');
+    const savedBoundary = state.boundaryRequests.at(-1);
+    assert(savedBoundary.p_profile_id === 'test-profile' && savedBoundary.p_geometry.coordinates[0][0].length === 6,
+    'Saving an edited boundary should persist the updated GeoJSON through the boundary RPC.');
+    passed.push('Imported boundary editing is source-gated and supports add, cancel, and RPC save');
     assert(state.gpsRequests === 0 && !control('location-consent-dialog'),
       'Selecting a shared profile should not request location or show a blocking consent dialog.');
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
@@ -266,6 +340,7 @@ export async function runAppTests() {
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('hunting-mode-control').hidden);
+    assert(!control('edit-boundary').hidden, 'The owner should be able to edit an imported boundary.');
     await waitFor(() => state.gpsRequests === 7);
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
@@ -282,6 +357,29 @@ export async function runAppTests() {
     assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 7,
     'A stale hunting mode write restarted profile UI or GPS.');
     passed.push('App ignores a pending hunting-mode response after selection changes');
+
+    const importMultiPolygon = async name => {
+      const geometry = { type: 'MultiPolygon', coordinates: [
+        [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]]],
+        [[[8, 49], [9, 49], [9, 50], [8, 50], [8, 49]]]
+      ] };
+      const file = new frame.File([JSON.stringify(geometry)], 'mehrere-reviere.geojson', { type: 'application/geo+json' });
+      const fileInput = control('import-profile-file');
+      Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+      fileInput.dispatchEvent(new frame.Event('change', { bubbles: true }));
+      await waitFor(() => control('boundary-import-dialog').open);
+      assert(control('boundary-import-name').value === 'mehrere-reviere', 'Import should prefill the name from the filename.');
+      control('boundary-import-name').value = name;
+      control('boundary-import-dialog').querySelector('button[value="import"]').click();
+      await waitFor(() => state.createdProfiles.length === (name === 'Nordrevier' ? 1 : 2));
+      await waitFor(() => control('saved-status').textContent === 'Revierdatei importiert und geoeffnet.');
+    };
+    await importMultiPolygon('Nordrevier');
+    await importMultiPolygon('Suedrevier');
+    assert(state.createdProfiles.map(profile => profile.p_district_name).join('|') === 'Nordrevier|Suedrevier' &&
+      state.createdProfiles[0].p_feature_id !== state.createdProfiles[1].p_feature_id,
+    'Repeated MultiPolygon imports with different names should create separate profiles.');
+    passed.push('Repeated MultiPolygon imports accept distinct district names and create separate profiles');
     return passed;
   } finally {
     iframe.remove();

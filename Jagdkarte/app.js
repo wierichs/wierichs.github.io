@@ -87,6 +87,10 @@ let savedProfilePending = false;
 let profileImportPending = false;
 let profileDeletePending = false;
 let activeProfile = null;
+let boundaryEditGeometry = null;
+let selectedBoundaryVertex = null;
+let selectedBoundaryPart = null;
+let boundaryEditPending = false;
 let placementMode = false;
 let markerCoordinates = null;
 let markerPending = false;
@@ -107,6 +111,8 @@ let profileActivationRevision = 0;
 let huntingModePending = false;
 const profileMarkers = L.layerGroup().addTo(map);
 const profileLocations = L.layerGroup().addTo(map);
+const boundaryEditHandles = L.layerGroup().addTo(map);
+const boundaryEditParts = L.layerGroup().addTo(map);
 
 window.lucide?.createIcons();
 new ResizeObserver(() => map.invalidateSize()).observe(element('map'));
@@ -188,21 +194,30 @@ element('import-profile-file').addEventListener('change', event => {
   if (file) void importJwdProfile(file);
 });
 
-function chooseGeoJsonBoundary(candidates) {
+function chooseProfileImport(imported) {
+  const candidates = imported.candidates || [imported];
   const dialog = element('boundary-import-dialog');
   const select = element('boundary-import-feature');
+  const selectLabel = element('boundary-import-feature-label');
+  const nameInput = element('boundary-import-name');
   select.replaceChildren(...candidates.map((candidate, index) => {
     const option = document.createElement('option');
     option.value = String(index);
     option.textContent = `${candidate.name} (${index + 1})`;
     return option;
   }));
+  select.hidden = candidates.length < 2;
+  selectLabel.hidden = candidates.length < 2;
+  nameInput.value = candidates[0].name;
+  select.onchange = () => { nameInput.value = candidates[Number(select.value)].name; };
   return new Promise(resolve => {
     dialog.addEventListener('close', () => {
-      resolve(dialog.returnValue === 'import' ? candidates[Number(select.value)] : null);
+      const candidate = candidates[Number(select.value)] || candidates[0];
+      const name = nameInput.value.trim();
+      resolve(dialog.returnValue === 'import' && name ? { ...candidate, name } : null);
     }, { once: true });
     dialog.showModal();
-    select.focus();
+    (candidates.length > 1 ? select : nameInput).focus();
   });
 }
 
@@ -350,13 +365,10 @@ async function importJwdProfile(file) {
     if (file.size > 10 * 1024 * 1024) throw new Error('Die Datei ist groesser als 10 MB.');
     const { findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseProfileImport } = await import('./jwd-import.js');
     let imported = parseProfileImport(await file.text(), file.name);
-    if (imported.candidates) {
-      const selectedBoundary = await chooseGeoJsonBoundary(imported.candidates);
-      if (!selectedBoundary) {
-        element('saved-status').textContent = 'GeoJSON-Import abgebrochen.';
-        return;
-      }
-      imported = selectedBoundary;
+    imported = await chooseProfileImport(imported);
+    if (!imported) {
+      element('saved-status').textContent = 'Revierimport abgebrochen.';
+      return;
     }
     if (imported.name.length > 200) throw new Error('Der Reviername ist laenger als 200 Zeichen.');
     if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
@@ -579,6 +591,25 @@ function resetMarkerPlacement() {
 
 function updateProfileControls() {
   const canEdit = canEditProfile();
+  const source = currentSource();
+  const canEditBoundary = Boolean(canEdit && source?.type === 'profile-imports' && activeProfile && selected &&
+    activeProfile.source_id === source.id && activeProfile.feature_id === selectedFeatureId());
+  element('edit-boundary').hidden = !canEditBoundary || boundaryEditGeometry !== null;
+  element('remove-boundary-point').hidden = !canEditBoundary || boundaryEditGeometry === null;
+  element('remove-boundary-part').hidden = !canEditBoundary || boundaryEditGeometry === null;
+  element('save-boundary').hidden = !canEditBoundary || boundaryEditGeometry === null;
+  element('cancel-boundary').hidden = !canEditBoundary || boundaryEditGeometry === null;
+  element('edit-boundary').disabled = boundaryEditPending;
+  element('remove-boundary-point').disabled = boundaryEditPending || !selectedBoundaryVertex ||
+    selectedBoundaryVertex.ring.length <= 4;
+  const polygonCount = boundaryPolygons(boundaryEditGeometry).length;
+  const canRemoveBoundaryPart = Boolean(selectedBoundaryVertex?.ringIndex > 0 ||
+    (selectedBoundaryPart !== null && polygonCount > 1));
+  element('remove-boundary-part').disabled = boundaryEditPending || !canRemoveBoundaryPart;
+  element('remove-boundary-part').querySelector('span').textContent = selectedBoundaryVertex?.ringIndex > 0
+    ? 'Innenfläche entfernen' : 'Teilfläche entfernen';
+  element('save-boundary').disabled = boundaryEditPending;
+  element('cancel-boundary').disabled = boundaryEditPending;
   const canCreate = Boolean(user && selected && selectedFeatureId());
   element('claim-profile').hidden = !canCreate || profiles.some(profile => profile.owner_id === user.id);
   element('invite-toggle').hidden = !canEdit;
@@ -1277,6 +1308,7 @@ async function loadProfiles(preferredId) {
 function clearSelection() {
   profileActivationRevision += 1;
   void stopProfileLocation();
+  stopBoundaryEditing(true);
   if (boundary) map.removeLayer(boundary);
   boundary = null;
   selected = null;
@@ -1634,6 +1666,40 @@ element('profile-list').addEventListener('change', async event => {
   const profile = profiles.find(candidate => candidate.id === event.target.value) || null;
   await chooseProfile(profile);
 });
+element('edit-boundary').addEventListener('click', startBoundaryEditing);
+element('remove-boundary-point').addEventListener('click', () => {
+  if (!selectedBoundaryVertex || selectedBoundaryVertex.ring.length <= 4 || boundaryEditPending) return;
+  const { ring, index } = selectedBoundaryVertex;
+  ring.splice(index, 1);
+  ring[ring.length - 1] = [...ring[0]];
+  selectedBoundaryPart = null;
+  if (boundary) {
+    boundary.clearLayers();
+    boundary.addData({ ...selected, geometry: boundaryEditGeometry });
+  }
+  renderBoundaryEditParts();
+  renderBoundaryEditHandles();
+  updateProfileControls();
+});
+element('remove-boundary-part').addEventListener('click', () => {
+  if (boundaryEditPending) return;
+  if (selectedBoundaryVertex?.ringIndex > 0) {
+    selectedBoundaryVertex.polygon.splice(selectedBoundaryVertex.ringIndex, 1);
+  } else if (selectedBoundaryPart !== null && boundaryPolygons(boundaryEditGeometry).length > 1) {
+    boundaryEditGeometry.coordinates.splice(selectedBoundaryPart, 1);
+  } else return;
+  selectedBoundaryPart = null;
+  selectedBoundaryVertex = null;
+  if (boundary) {
+    boundary.clearLayers();
+    boundary.addData({ ...selected, geometry: boundaryEditGeometry });
+  }
+  renderBoundaryEditParts();
+  renderBoundaryEditHandles();
+  updateProfileControls();
+});
+element('save-boundary').addEventListener('click', saveBoundaryEditing);
+element('cancel-boundary').addEventListener('click', () => stopBoundaryEditing(true));
 element('display-name-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!user || !supabaseClient) return;
@@ -1694,6 +1760,7 @@ element('hunting-mode').addEventListener('change', async event => {
 
 async function chooseProfile(profile) {
   const revision = ++profileActivationRevision;
+  stopBoundaryEditing(true);
   await stopProfileLocation();
   if (revision !== profileActivationRevision) return;
   saveProfileChoice(profile?.id || null);
@@ -2169,4 +2236,144 @@ if ('serviceWorker' in navigator) {
 if (savedSelection) {
   element('source').value = savedSelection.sourceId;
   void loadSelectedSource();
+}
+
+function boundaryRings(geometry) {
+  return boundaryPolygons(geometry).flat();
+}
+
+function boundaryPolygons(geometry) {
+  if (geometry?.type === 'Polygon') return [geometry.coordinates];
+  if (geometry?.type === 'MultiPolygon') return geometry.coordinates;
+  return [];
+}
+
+function renderBoundaryEditParts() {
+  boundaryEditParts.clearLayers();
+  boundaryPolygons(boundaryEditGeometry).forEach((polygon, index) => {
+    const layer = L.polygon(polygon[0].map(([longitude, latitude]) => [latitude, longitude]), {
+      color: selectedBoundaryPart === index ? '#e2a930' : '#c43b55',
+      weight: selectedBoundaryPart === index ? 4 : 2,
+      opacity: 0.8,
+      fillColor: selectedBoundaryPart === index ? '#e2a930' : '#c43b55',
+      fillOpacity: selectedBoundaryPart === index ? 0.16 : 0.001,
+      className: 'boundary-edit-part'
+    });
+    layer.on('click', () => {
+      selectedBoundaryPart = index;
+      selectedBoundaryVertex = null;
+      renderBoundaryEditParts();
+      updateProfileControls();
+    });
+    boundaryEditParts.addLayer(layer);
+  });
+}
+
+function renderBoundaryEditHandles() {
+  boundaryEditHandles.clearLayers();
+  selectedBoundaryVertex = null;
+  const vertexIcon = L.divIcon({ className: 'boundary-edit-handle boundary-edit-vertex', iconSize: [18, 18], iconAnchor: [9, 9] });
+  const midpointIcon = L.divIcon({ className: 'boundary-edit-handle boundary-edit-midpoint', iconSize: [14, 14], iconAnchor: [7, 7] });
+  boundaryPolygons(boundaryEditGeometry).forEach((polygon, polygonIndex) => {
+    polygon.forEach((ring, ringIndex) => {
+      const vertexCount = ring.length - 1;
+      for (let index = 0; index < vertexCount; index += 1) {
+        const coordinate = ring[index];
+        const vertex = L.marker([coordinate[1], coordinate[0]], {
+          draggable: true, keyboard: true, title: 'Grenzpunkt verschieben', icon: vertexIcon
+        });
+        vertex.on('click', () => {
+          selectedBoundaryPart = null;
+          selectedBoundaryVertex = { polygon, ring, ringIndex, index };
+          renderBoundaryEditParts();
+          updateProfileControls();
+        });
+        vertex.on('drag', event => {
+          const { lat, lng } = event.target.getLatLng();
+          ring[index] = [lng, lat];
+          if (index === 0) ring[vertexCount] = [...ring[0]];
+          if (boundary) {
+            boundary.clearLayers();
+            boundary.addData({ ...selected, geometry: boundaryEditGeometry });
+          }
+        });
+        vertex.on('dragend', () => {
+          renderBoundaryEditParts();
+          renderBoundaryEditHandles();
+          updateProfileControls();
+        });
+        boundaryEditHandles.addLayer(vertex);
+
+        const next = ring[(index + 1) % vertexCount];
+        const midpoint = L.marker([(coordinate[1] + next[1]) / 2, (coordinate[0] + next[0]) / 2], {
+          keyboard: true, title: 'Grenzpunkt hinzufuegen', icon: midpointIcon
+        });
+        midpoint.on('click', () => {
+          selectedBoundaryPart = null;
+          ring.splice(index + 1, 0, [(coordinate[0] + next[0]) / 2, (coordinate[1] + next[1]) / 2]);
+          ring[ring.length - 1] = [...ring[0]];
+          if (boundary) {
+            boundary.clearLayers();
+            boundary.addData({ ...selected, geometry: boundaryEditGeometry });
+          }
+          renderBoundaryEditParts();
+          renderBoundaryEditHandles();
+          updateProfileControls();
+        });
+        boundaryEditHandles.addLayer(midpoint);
+      }
+    });
+  });
+}
+
+function startBoundaryEditing() {
+  if (currentSource()?.type !== 'profile-imports' || !canEditProfile() || !selected) return;
+  resetMarkerPlacement();
+  boundaryEditGeometry = JSON.parse(JSON.stringify(selected.geometry));
+  selectedBoundaryPart = null;
+  renderBoundaryEditParts();
+  renderBoundaryEditHandles();
+  updateProfileControls();
+}
+
+function stopBoundaryEditing(restore = false) {
+  if (restore && boundary && selected) {
+    boundary.clearLayers();
+    boundary.addData(selected);
+  }
+  boundaryEditGeometry = null;
+  selectedBoundaryVertex = null;
+  selectedBoundaryPart = null;
+  boundaryEditHandles.clearLayers();
+  boundaryEditParts.clearLayers();
+  boundaryEditPending = false;
+  if (element('edit-boundary')) updateProfileControls();
+}
+
+async function saveBoundaryEditing() {
+  const profile = activeProfile;
+  if (!profile || !canEditProfile(profile) || currentSource()?.type !== 'profile-imports' ||
+      !boundaryEditGeometry || !supabaseClient || boundaryEditPending) return;
+  boundaryEditPending = true;
+  updateProfileControls();
+  const geometry = JSON.parse(JSON.stringify(boundaryEditGeometry));
+  const { error } = await supabaseClient.rpc('set_hunting_profile_boundary', {
+    p_profile_id: profile.id, p_geometry: geometry
+  });
+  boundaryEditPending = false;
+  if (activeProfile?.id !== profile.id || currentSource()?.type !== 'profile-imports') return;
+  if (error) {
+    updateProfileControls();
+    profileStatus(`Grenze konnte nicht gespeichert werden: ${error.message}`);
+    return;
+  }
+  selected = { ...selected, geometry };
+  features = features.map(feature => featureIdentifier(feature, currentSource()) === profile.feature_id
+    ? { ...feature, geometry } : feature);
+  stopBoundaryEditing();
+  if (boundary) {
+    boundary.clearLayers();
+    boundary.addData(selected);
+  }
+  profileStatus('Reviergrenze gespeichert.');
 }

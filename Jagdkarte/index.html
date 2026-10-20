@@ -15,7 +15,7 @@
   <script defer src="./lucide.js"></script>
   <script defer src="./supabase.js"></script>
   <script defer src="./config.js"></script>
-  <script type="module" src="./app.js?v=74"></script>
+  <script type="module" src="./app.js?v=77"></script>
 </head>
 <body>
   <header class="topbar">
@@ -72,6 +72,11 @@
           <p id="presence-status" role="status" aria-live="polite" hidden></p>
           <div class="profile-actions">
             <button id="invite-toggle" type="button" hidden>Benutzer einladen</button>
+            <button id="edit-boundary" type="button" hidden><i data-lucide="edit-3" aria-hidden="true"></i><span>Grenze bearbeiten</span></button>
+            <button id="remove-boundary-point" type="button" hidden disabled><i data-lucide="minus" aria-hidden="true"></i><span>Punkt entfernen</span></button>
+            <button id="remove-boundary-part" type="button" hidden disabled><i data-lucide="trash-2" aria-hidden="true"></i><span>Teilfläche entfernen</span></button>
+            <button id="save-boundary" class="primary" type="button" hidden><i data-lucide="save" aria-hidden="true"></i><span>Speichern</span></button>
+            <button id="cancel-boundary" type="button" hidden><i data-lucide="x" aria-hidden="true"></i><span>Abbrechen</span></button>
             <button id="delete-profile" class="danger" type="button" hidden><i data-lucide="trash-2" aria-hidden="true"></i><span>Eigenes Revier loeschen</span></button>
             <button id="add-marker" type="button" hidden><i data-lucide="map-pin-plus" aria-hidden="true"></i><span>Markierung setzen</span></button>
           </div>
@@ -128,9 +133,11 @@
   </dialog>
   <dialog id="boundary-import-dialog" aria-labelledby="boundary-import-title">
     <form method="dialog">
-      <div class="dialog-heading"><h2 id="boundary-import-title">Gemeindegrenze waehlen</h2></div>
-      <label for="boundary-import-feature">Als Reviergrenze importieren</label>
+      <div class="dialog-heading"><h2 id="boundary-import-title">Revier importieren</h2></div>
+      <label id="boundary-import-feature-label" for="boundary-import-feature">Kartenobjekt</label>
       <select id="boundary-import-feature"></select>
+      <label for="boundary-import-name">Reviername</label>
+      <input id="boundary-import-name" required pattern=".*\S.*" maxlength="200" autocomplete="off">
       <div class="profile-actions"><button type="submit" value="cancel">Abbrechen</button><button class="primary" type="submit" value="import">Grenze importieren</button></div>
     </form>
   </dialog>
