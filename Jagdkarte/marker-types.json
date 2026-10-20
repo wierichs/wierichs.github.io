@@ -13,7 +13,7 @@
     {
       "id": "bock",
       "label": "Bock",
-      "iconUrl": "./markers/sonstiges.svg",
+      "iconUrl": "./markers/drueckjagdbock.svg",
       "iconSize": [40, 48],
       "iconAnchor": [20, 46],
       "popupAnchor": [0, -42]
@@ -21,7 +21,7 @@
     {
       "id": "erdsitz",
       "label": "Erdsitz",
-      "iconUrl": "./markers/sonstiges.svg",
+      "iconUrl": "./markers/erdsitz.svg",
       "iconSize": [40, 48],
       "iconAnchor": [20, 46],
       "popupAnchor": [0, -42]
@@ -29,7 +29,7 @@
     {
       "id": "salzlecke",
       "label": "Salzlecke",
-      "iconUrl": "./markers/sonstiges.svg",
+      "iconUrl": "./markers/salzlecke.svg",
       "iconSize": [40, 48],
       "iconAnchor": [20, 46],
       "popupAnchor": [0, -42]
