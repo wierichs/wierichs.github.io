@@ -90,6 +90,10 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .profile-marker-popup { min-width: 150px; }
 .profile-marker-popup strong, .profile-marker-popup span { display: block; overflow-wrap: anywhere; }
 .profile-marker-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.profile-marker-type-form { margin-top: 8px; }
+.profile-marker-type-form select { width: 100%; min-width: 0; margin-bottom: 0; }
+.profile-marker-type-actions { display: flex; gap: 6px; }
+.profile-marker-type-form button { margin-top: 6px; }
 .profile-location-popup strong, .profile-location-popup span { display: block; overflow-wrap: anywhere; }
 .profile-location-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
 .profile-marker-popup button { width: 36px; height: 36px; max-width: 100%; flex: 0 0 36px; gap: 0; margin-top: 9px; min-height: 36px; padding: 8px; }

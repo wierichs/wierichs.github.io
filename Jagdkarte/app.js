@@ -700,6 +700,93 @@ async function loadProfileMarkers() {
       notes.textContent = marker.notes;
       popup.append(notes);
     }
+    if (canEditProfile(activeProfile) && !type.temporary) {
+      const editType = document.createElement('button');
+      editType.type = 'button';
+      editType.setAttribute('aria-label', 'Markertyp ändern');
+      editType.title = 'Markertyp ändern';
+      const editIcon = document.createElement('i');
+      editIcon.setAttribute('data-lucide', 'pencil');
+      editIcon.setAttribute('aria-hidden', 'true');
+      editType.append(editIcon);
+      const typeForm = document.createElement('form');
+      typeForm.className = 'profile-marker-type-form';
+      typeForm.hidden = true;
+      const typeSelect = document.createElement('select');
+      typeSelect.className = 'profile-marker-type-select';
+      typeSelect.setAttribute('aria-label', 'Neuer Markertyp');
+      markerTypes.filter(candidate => !candidate.temporary).forEach(candidate => {
+        const option = document.createElement('option');
+        option.value = candidate.id;
+        option.textContent = candidate.label;
+        typeSelect.append(option);
+      });
+      typeSelect.value = markerTypesById.has(marker.type_id) ? marker.type_id : fallbackMarkerType;
+      const typeActions = document.createElement('div');
+      typeActions.className = 'profile-marker-type-actions';
+      const saveType = document.createElement('button');
+      saveType.type = 'submit';
+      saveType.setAttribute('aria-label', 'Markertyp speichern');
+      saveType.title = 'Markertyp speichern';
+      const saveIcon = document.createElement('i');
+      saveIcon.setAttribute('data-lucide', 'check');
+      saveIcon.setAttribute('aria-hidden', 'true');
+      saveType.append(saveIcon);
+      const cancelType = document.createElement('button');
+      cancelType.type = 'button';
+      cancelType.setAttribute('aria-label', 'Abbrechen');
+      cancelType.title = 'Abbrechen';
+      const cancelIcon = document.createElement('i');
+      cancelIcon.setAttribute('data-lucide', 'x');
+      cancelIcon.setAttribute('aria-hidden', 'true');
+      cancelType.append(cancelIcon);
+      typeActions.append(saveType, cancelType);
+      typeForm.append(typeSelect, typeActions);
+      const markerProfileId = activeProfile.id;
+      const markerUserId = user.id;
+      editType.addEventListener('click', () => {
+        typeForm.hidden = false;
+        editType.hidden = true;
+        typeSelect.focus();
+      });
+      cancelType.addEventListener('click', () => {
+        typeSelect.value = markerTypesById.has(marker.type_id) ? marker.type_id : fallbackMarkerType;
+        typeForm.hidden = true;
+        editType.hidden = false;
+        editType.focus();
+      });
+      typeForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (activeProfile?.id !== markerProfileId || user?.id !== markerUserId || !canEditProfile()) return;
+        const nextType = markerTypesById.get(typeSelect.value);
+        if (!nextType || nextType.temporary) return;
+        if (nextType.id === marker.type_id) {
+          typeForm.hidden = true;
+          editType.hidden = false;
+          return;
+        }
+        saveType.disabled = true;
+        cancelType.disabled = true;
+        try {
+          const { error: typeError } = await supabaseClient.rpc('change_hunting_marker_type', {
+            p_marker_id: marker.id, p_type_id: nextType.id
+          });
+          if (activeProfile?.id !== markerProfileId || user?.id !== markerUserId) return;
+          if (typeError) throw new Error(typeError.message);
+          typeForm.hidden = true;
+          profileStatus('Markertyp geändert.');
+          await loadProfileMarkers();
+        } catch (error) {
+          if (activeProfile?.id === markerProfileId && user?.id === markerUserId) {
+            profileStatus(`Markertyp konnte nicht geändert werden: ${error.message}`);
+          }
+        } finally {
+          saveType.disabled = false;
+          cancelType.disabled = false;
+        }
+      });
+      popup.append(editType, typeForm);
+    }
     if (expiresAt !== null) {
       const expiry = document.createElement('span');
       expiry.textContent = `Gueltig bis ${new Date(expiresAt).toLocaleString('de-DE')}`;

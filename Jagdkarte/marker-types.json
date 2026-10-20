@@ -59,6 +59,14 @@
       "popupAnchor": [0, -42]
     },
     {
+      "id": "wagen",
+      "label": "Wagen",
+      "iconUrl": "./markers/wagen.svg",
+      "iconSize": [40, 48],
+      "iconAnchor": [20, 46],
+      "popupAnchor": [0, -42]
+    },
+    {
       "id": "drueckjagdbock",
       "label": "Drückjagdbock",
       "iconUrl": "./markers/drueckjagdbock.svg",

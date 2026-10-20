@@ -4,7 +4,8 @@ export async function initializeAppFixture() {
   for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) document.head.append(stylesheet);
   const geometry = { type: 'Polygon', coordinates: [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]]] };
   const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false,
-    denyLocation: false, memberRole: 'guest', moveRequests: [], currentPosition: { latitude: 49.5, longitude: 6.5 } };
+    denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
+    currentPosition: { latitude: 49.5, longitude: 6.5 } };
   let authCallback = () => {};
   const profile = () => ({ id: 'test-profile', source_id: 'user-imports', feature_id: 'jwd-test',
     district_name: 'Privates Testrevier', owner_id: 'owner', created_at: '2026-01-01',
@@ -18,7 +19,7 @@ export async function initializeAppFixture() {
     if (!state.user) return [];
     if (table === 'hunting_profiles') return [profile()];
     if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: state.memberRole }];
-    if (table === 'hunting_markers') return [{ id: 'test-marker', profile_id: 'test-profile', type_id: 'sonstiges',
+    if (table === 'hunting_markers') return [{ id: 'test-marker', profile_id: 'test-profile', type_id: state.markerType,
       title: 'Testmarker', notes: '', latitude: 49.6, longitude: 6.6, created_by: 'owner',
       created_at: '2026-01-01T00:00:00Z', expires_at: null }];
     if (table === 'hunting_profile_locations') return [{ profile_id: 'test-profile', user_id: 'member',
@@ -53,6 +54,11 @@ export async function initializeAppFixture() {
   const client = {
     from: query,
     rpc(name, parameters) {
+      if (name === 'change_hunting_marker_type') {
+        state.typeChangeRequests.push(parameters);
+        state.markerType = parameters.p_type_id;
+        return Promise.resolve({ data: null, error: null });
+      }
       if (name === 'move_hunting_marker_to_location') {
         state.moveRequests.push(parameters);
         return Promise.resolve({ data: null, error: null });
@@ -177,6 +183,27 @@ export async function runAppTests() {
     assert(state.moveRequests[0].p_marker_id === 'test-marker' && state.moveRequests[0].p_latitude === 49.5 &&
       state.moveRequests[0].p_longitude === 6.5, 'Editor marker move did not submit the current GPS position.');
     passed.push('Editor can move a marker to the current position');
+    await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
+    await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .some(button => button.getAttribute('aria-label') === 'Markertyp ändern'));
+    const editTypeButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .find(button => button.getAttribute('aria-label') === 'Markertyp ändern');
+    editTypeButton.click();
+    const typeForm = frame.document.querySelector('.profile-marker-type-form');
+    const typeSelect = typeForm.querySelector('select');
+    assert(!typeForm.hidden && !Array.from(typeSelect.options).some(option =>
+      ['anschuss', 'wildsichtung', 'standplatz'].includes(option.value)),
+    'Marker type editor exposed temporary types or did not open.');
+    typeSelect.value = 'erdsitz';
+    typeForm.dispatchEvent(new frame.Event('submit', { bubbles: true, cancelable: true }));
+    await waitFor(() => state.typeChangeRequests.length === 1 &&
+      control('profile-status').textContent === 'Markertyp geändert.');
+    await waitFor(() => Array.from(frame.document.querySelectorAll('#map .leaflet-marker-pane img.leaflet-marker-icon'))
+      .some(icon => icon.getAttribute('src')?.endsWith('/markers/erdsitz.svg')));
+    assert(state.typeChangeRequests[0].p_marker_id === 'test-marker' &&
+      state.typeChangeRequests[0].p_type_id === 'erdsitz', 'Marker type editor sent incorrect RPC parameters.');
+    passed.push('Editor can change a permanent marker type; temporary types are excluded');
     state.currentPosition = { latitude: 52, longitude: 8 };
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();

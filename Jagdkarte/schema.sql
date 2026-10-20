@@ -351,6 +351,40 @@ begin
 end;
 $$;
 
+create or replace function public.change_hunting_marker_type(p_marker_id uuid, p_type_id text)
+returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  marker_profile_id uuid;
+  current_type_id text;
+begin
+  if auth.uid() is null then
+    raise exception 'Anmeldung erforderlich';
+  end if;
+  if p_type_id is null or p_type_id !~ '^[a-z0-9][a-z0-9_-]{0,39}$'
+    or p_type_id in ('anschuss', 'wildsichtung', 'standplatz') then
+    raise exception 'Ungueltiger dauerhafter Markertyp';
+  end if;
+  select marker.profile_id, marker.type_id
+    into marker_profile_id, current_type_id
+    from public.hunting_markers marker
+    where marker.id = p_marker_id and (marker.expires_at is null or marker.expires_at > now())
+    for update of marker;
+  if not found then
+    raise exception 'Markierung nicht gefunden oder abgelaufen';
+  end if;
+  if not public.can_edit_hunting_profile(marker_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann Markertypen aendern';
+  end if;
+  if current_type_id in ('anschuss', 'wildsichtung', 'standplatz') then
+    raise exception 'Temporäre Markierungstypen können nicht geändert werden';
+  end if;
+  update public.hunting_markers set type_id = p_type_id where id = p_marker_id;
+end;
+$$;
+
 create or replace function public.delete_expired_hunting_markers()
 returns void
 language sql security definer
@@ -520,8 +554,10 @@ revoke all on function public.set_hunting_marker_expiry() from public, anon, aut
 revoke all on function public.create_temporary_hunting_marker(uuid, text, text, text,
   double precision, double precision, double precision, double precision) from public, anon, authenticated;
 revoke all on function public.move_hunting_marker_to_location(uuid, double precision, double precision) from public, anon, authenticated;
+revoke all on function public.change_hunting_marker_type(uuid, text) from public, anon, authenticated;
 revoke all on function public.delete_expired_hunting_markers() from public, anon, authenticated;
 grant execute on function public.set_hunting_profile_boundary(uuid, jsonb) to authenticated;
 grant execute on function public.create_temporary_hunting_marker(uuid, text, text, text,
   double precision, double precision, double precision, double precision) to authenticated;
 grant execute on function public.move_hunting_marker_to_location(uuid, double precision, double precision) to authenticated;
+grant execute on function public.change_hunting_marker_type(uuid, text) to authenticated;
