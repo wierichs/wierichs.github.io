@@ -105,8 +105,11 @@ export async function initializeAppFixture() {
 
 export async function runAppTests() {
   const profileStorageKey = 'jagdkarte-last-profile-v1';
+  const locationConsentStorageKey = 'jagdkarte-location-consent-v1';
   const previousProfileChoice = localStorage.getItem(profileStorageKey);
+  const previousLocationConsents = localStorage.getItem(locationConsentStorageKey);
   localStorage.removeItem(profileStorageKey);
+  localStorage.removeItem(locationConsentStorageKey);
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;left:-10000px;width:1200px;height:800px;border:0';
   iframe.src = './tests.html?app-fixture';
@@ -203,6 +206,24 @@ export async function runAppTests() {
     assert(control('profile-list').value === 'test-profile' && !control('share-location').checked && state.gpsRequests === 4,
       'Denying browser location access should keep the shared profile available without sharing.');
     state.denyLocation = false;
+    assert(JSON.parse(localStorage.getItem(locationConsentStorageKey))['member:test-profile'] === false,
+      'Browser location denial did not save a rejection for this user and profile.');
+    change('profile-list', '');
+    await waitFor(() => control('profile-status').textContent === 'Du siehst dieses Revier wie ein Gast.');
+    change('profile-list', 'test-profile');
+    await waitFor(() => control('profile-list').value === 'test-profile' &&
+      !control('share-location-control').hidden && !control('share-location').checked);
+    assert(state.gpsRequests === 4, 'A saved rejection restarted location sharing after a profile switch.');
+    control('share-location').checked = true;
+    control('share-location').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => state.gpsRequests === 5);
+    assert(JSON.parse(localStorage.getItem(locationConsentStorageKey))['member:test-profile'] === true,
+      'Location-sharing approval was not saved for this user and profile.');
+    change('profile-list', '');
+    await waitFor(() => control('profile-status').textContent === 'Du siehst dieses Revier wie ein Gast.');
+    change('profile-list', 'test-profile');
+    await waitFor(() => state.gpsRequests === 6 && control('share-location').checked);
+    passed.push('Location-sharing approval and rejection persist across profile switches');
     passed.push('Browser location denial keeps the profile available and sharing disabled');
 
     control('account-button').click();
@@ -218,7 +239,7 @@ export async function runAppTests() {
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('hunting-mode-control').hidden);
-    await waitFor(() => state.gpsRequests === 5);
+    await waitFor(() => state.gpsRequests === 7);
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
     await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
@@ -231,7 +252,7 @@ export async function runAppTests() {
     control('clear').click();
     state.pendingMode();
     await waitFor(() => !control('hunting-mode').disabled);
-    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 5,
+    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 7,
     'A stale hunting mode write restarted profile UI or GPS.');
     passed.push('App ignores a pending hunting-mode response after selection changes');
     return passed;
@@ -239,5 +260,7 @@ export async function runAppTests() {
     iframe.remove();
     if (previousProfileChoice === null) localStorage.removeItem(profileStorageKey);
     else localStorage.setItem(profileStorageKey, previousProfileChoice);
+    if (previousLocationConsents === null) localStorage.removeItem(locationConsentStorageKey);
+    else localStorage.setItem(locationConsentStorageKey, previousLocationConsents);
   }
 }

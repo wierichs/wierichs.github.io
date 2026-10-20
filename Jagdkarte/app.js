@@ -4,9 +4,27 @@ const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
 const selectionStorageKey = 'jagdkarte-last-selection-v1';
 const profileSelectionStorageKey = 'jagdkarte-last-profile-v1';
+const locationConsentStorageKey = 'jagdkarte-location-consent-v1';
 const markerIconSizeStorageKey = 'jagdkarte-marker-icon-size-v1';
 const markerIconScales = { small: 0.8, standard: 1, large: 1.25 };
 const element = id => document.getElementById(id);
+function readLocationConsent(profile) {
+  if (!user || !profile) return null;
+  try {
+    const consents = JSON.parse(localStorage.getItem(locationConsentStorageKey) || '{}');
+    const consent = consents[`${user.id}:${profile.id}`];
+    return typeof consent === 'boolean' ? consent : null;
+  } catch { return null; }
+}
+function writeLocationConsent(profile, consent) {
+  if (!user || !profile) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(locationConsentStorageKey) || '{}');
+    const consents = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+    consents[`${user.id}:${profile.id}`] = consent;
+    localStorage.setItem(locationConsentStorageKey, JSON.stringify(consents));
+  } catch {}
+}
 const map = L.map('map').setView([51.1, 10.4], 6);
 const mapSurface = element('map-surface');
 const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -574,7 +592,8 @@ function updateProfileControls() {
   const canShareLocation = Boolean(user && activeProfile && activeProfile.owner_id !== user.id && activeProfile.hunting_mode);
   element('share-location-control').hidden = !canShareLocation;
   element('share-location-note').hidden = !canShareLocation;
-  element('share-location').checked = Boolean(canShareLocation && sharingProfileId === activeProfile.id);
+  element('share-location').checked = Boolean(canShareLocation &&
+    (sharingProfileId === activeProfile.id || readLocationConsent(activeProfile) === true));
   if (!canShareLocation) shareLocationStatus('');
   element('hunting-mode').disabled = huntingModePending;
   const availableTypes = markerTypes.filter(type => canEdit || (type.temporary && !type.editorsOnly));
@@ -843,6 +862,7 @@ function updateHuntingMode(profile, enabled) {
     element('presence-status').hidden = false;
     element('presence-status').textContent = 'Jagdmodus aktiv. Du kannst deinen Standort mit diesem Revier teilen.';
     startPresenceUpdates();
+    if (readLocationConsent(profile) === true) void startProfileLocationSharing(profile);
   }
 }
 
@@ -925,6 +945,7 @@ async function loadProfileLocations() {
 }
 
 async function startProfileLocationSharing(profile) {
+  if (sharingProfileId === profile.id) return;
   if (!navigator.geolocation) {
     element('share-location').checked = false;
     updateProfileControls();
@@ -990,6 +1011,7 @@ async function startProfileLocationSharing(profile) {
         sharedLocationIsInBoundary = false;
         void supabaseClient.from('hunting_profile_locations').delete()
           .eq('profile_id', profile.id).eq('user_id', user.id);
+        writeLocationConsent(profile, false);
         updateProfileControls();
         shareLocationStatus('Browser-Standortzugriff abgelehnt. Dein Standort wird nicht geteilt.');
       } else {
@@ -1066,6 +1088,7 @@ async function activateProfile(profile) {
   }
   element('presence-status').textContent = 'Jagdmodus aktiv. Du kannst deinen Standort mit diesem Revier teilen.';
   startPresenceUpdates();
+  if (readLocationConsent(profile) === true) void startProfileLocationSharing(profile);
 }
 
 async function loadProfiles(preferredId) {
@@ -1606,10 +1629,12 @@ element('share-location').addEventListener('change', event => {
     return;
   }
   if (event.currentTarget.checked) {
+    writeLocationConsent(profile, true);
     shareLocationStatus('Browser-Standortfreigabe wird angefragt ...');
     void startProfileLocationSharing(profile);
     return;
   }
+  writeLocationConsent(profile, false);
   shareLocationStatus('Dein Standort wird nicht mehr geteilt.');
   void stopProfileLocation().then(() => {
     if (activeProfile?.id === profile.id && profile.hunting_mode) startPresenceUpdates();
