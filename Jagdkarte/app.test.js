@@ -215,7 +215,6 @@ export async function runAppTests() {
 
     state.signIn('owner');
     await waitFor(() => !control('user-label').hidden);
-    change('source', 'user-imports');
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('hunting-mode-control').hidden);

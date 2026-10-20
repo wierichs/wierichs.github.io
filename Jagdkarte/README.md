@@ -109,7 +109,7 @@ email after `@`. Owner and Bearbeiter locations use distinct crown and shield
 icons on the map. Rerun `schema.sql` to create the private account-name table
 and authorized lookup RPCs.
 
-Signed-in users can import `.jwd` JSON files from the **Auswahl** tab. The import
+Signed-in users can import `.jwd` JSON files or `.geojson` boundaries from the **Auswahl** tab. A GeoJSON file with multiple polygon features lets the user choose one feature as the revier boundary. The import
 stores the boundary and permanent facilities as a private owner profile; invited
 members can access it through the normal profile-sharing controls. Pacified areas
 become polygon holes. Facilities outside the boundary are preserved after a

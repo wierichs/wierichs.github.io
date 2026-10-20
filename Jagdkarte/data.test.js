@@ -1,7 +1,7 @@
 import { loadBoundaries } from './data.js';
 import { pointInFeature, pointInRing } from './geometry.js';
 import { applyMarkerRules, canShareProfileLocation, fetchAllRows, importJwdProfileData } from './profile-data.js';
-import { createJwdExport, findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } from './jwd-import.js';
+import { createJwdExport, findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport, parseProfileImport } from './jwd-import.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -112,6 +112,35 @@ export async function runDataTests() {
   assert(imported.facilities.length === 1 && imported.facilities[0].type === 'Bock',
     'JWD import did not preserve facility data.');
   passed.push('JWD converts boundaries, pacified areas, and facilities');
+
+  const municipalityImport = parseProfileImport(JSON.stringify({ type: 'FeatureCollection', features: [
+    { type: 'Feature', properties: { GEN: 'Temmels' }, geometry: { type: 'Polygon', coordinates: [
+      [[6.45, 49.65], [6.5, 49.65], [6.5, 49.7], [6.45, 49.7]]
+    ] } },
+    { type: 'Feature', properties: { gemeinde: 'Nittel' }, geometry: { type: 'MultiPolygon', coordinates: [
+      [[[6.5, 49.6], [6.55, 49.6], [6.55, 49.65], [6.5, 49.6]]]
+    ] } }
+  ] }), 'gemeinden_simplify200.geojson');
+  assert(municipalityImport.candidates.length === 2 && municipalityImport.name === 'gemeinden_simplify200' &&
+    municipalityImport.candidates[0].name === 'Temmels' && municipalityImport.candidates[1].name === 'Nittel' &&
+    municipalityImport.candidates[0].geometry.coordinates[0].at(-1).join(',') === '6.45,49.65' &&
+    municipalityImport.candidates[1].geometry.type === 'MultiPolygon',
+    'GeoJSON municipality import did not expose named polygon boundaries with closed rings.');
+  const singleGeoJson = parseProfileImport(JSON.stringify({ type: 'Feature', properties: { name: 'Testgemeinde' },
+    geometry: { type: 'Polygon', coordinates: [[[6, 49], [7, 49], [7, 50]]] } }), 'boundary.geojson');
+  assert(singleGeoJson.name === 'Testgemeinde' && singleGeoJson.geometry.coordinates[0].length === 4,
+    'Single-feature GeoJSON did not import directly with a closed polygon ring.');
+  const bareGeometry = parseProfileImport({ type: 'Polygon', coordinates: [[[6, 49], [7, 49], [7, 50]]] }, 'direkt.geojson');
+  assert(bareGeometry.name === 'direkt' && bareGeometry.geometry.type === 'Polygon',
+    'Bare GeoJSON Polygon geometry was not accepted.');
+  let invalidGeoJsonRejected = false;
+  try {
+    parseProfileImport({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [
+      [[181, 49], [7, 49], [7, 50]]
+    ] } }, 'invalid.geojson');
+  } catch (error) { invalidGeoJsonRejected = error.message.includes('ungueltige Koordinaten'); }
+  assert(invalidGeoJsonRejected, 'GeoJSON import accepted out-of-range coordinates.');
+  passed.push('GeoJSON imports individual municipality Polygon and MultiPolygon boundaries');
 
   const exportTypes = [{ id: 'bock', label: 'Bock' }, { id: 'anschuss', label: 'Anschuss', temporary: true }];
   const exportMarkers = [

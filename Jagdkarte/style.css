@@ -130,6 +130,7 @@ dialog::backdrop { background: #152a2260; }
 #login-form, #code-form { margin-top: 20px; }
 #login-form button, #code-form button { width: 100%; margin-top: 16px; }
 #login-status { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+#boundary-import-dialog select { width: 100%; margin: 8px 0 16px; }
 @media (max-width: 700px) {
   .topbar { height: 60px; padding: 0 14px; gap: 10px; }
   .brand { font-size: 21px; } #user-label { display: block; flex: 0 1 96px; max-width: 96px; font-size: 10px; padding: 0; } .network { display: none; } .account { margin-left: auto; gap: 6px; }

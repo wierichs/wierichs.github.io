@@ -170,6 +170,24 @@ element('import-profile-file').addEventListener('change', event => {
   if (file) void importJwdProfile(file);
 });
 
+function chooseGeoJsonBoundary(candidates) {
+  const dialog = element('boundary-import-dialog');
+  const select = element('boundary-import-feature');
+  select.replaceChildren(...candidates.map((candidate, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = `${candidate.name} (${index + 1})`;
+    return option;
+  }));
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => {
+      resolve(dialog.returnValue === 'import' ? candidates[Number(select.value)] : null);
+    }, { once: true });
+    dialog.showModal();
+    select.focus();
+  });
+}
+
 function updateSavedProfileSelection() {
   for (const button of element('saved-profiles').querySelectorAll('button')) {
     const profile = savedProfiles.find(candidate => candidate.id === button.dataset.profileId);
@@ -312,8 +330,16 @@ async function importJwdProfile(file) {
   element('saved-status').textContent = 'Revierdatei wird geprueft ...';
   try {
     if (file.size > 10 * 1024 * 1024) throw new Error('Die Datei ist groesser als 10 MB.');
-    const { findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseJwdImport } = await import('./jwd-import.js');
-    const imported = parseJwdImport(await file.text());
+    const { findJwdFacilityAdditions, mapJwdFacilities, matchingEditableProfiles, parseProfileImport } = await import('./jwd-import.js');
+    let imported = parseProfileImport(await file.text(), file.name);
+    if (imported.candidates) {
+      const selectedBoundary = await chooseGeoJsonBoundary(imported.candidates);
+      if (!selectedBoundary) {
+        element('saved-status').textContent = 'GeoJSON-Import abgebrochen.';
+        return;
+      }
+      imported = selectedBoundary;
+    }
     if (imported.name.length > 200) throw new Error('Der Reviername ist laenger als 200 Zeichen.');
     if (user?.id !== userId) throw new Error('Die Anmeldung hat sich waehrend des Imports geaendert.');
     if (!markerTypesById.has(fallbackMarkerType)) throw new Error('Der Markerkatalog ist noch nicht verfuegbar.');
@@ -1535,6 +1561,7 @@ element('marker-icon-size').addEventListener('change', event => {
 element('hunting-mode').addEventListener('change', async event => {
   const profile = activeProfile;
   if (!profile || !canEditProfile(profile) || !supabaseClient) return;
+  const revision = profileActivationRevision;
   const enabled = event.currentTarget.checked;
   huntingModePending = true;
   updateProfileControls();
@@ -1543,6 +1570,10 @@ element('hunting-mode').addEventListener('change', async event => {
     p_enabled: enabled
   });
   huntingModePending = false;
+  if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) {
+    updateProfileControls();
+    return;
+  }
   if (error) {
     updateProfileControls();
     profileStatus(`Jagdmodus konnte nicht geaendert werden: ${error.message}. Datenbankschema aus schema.sql aktualisieren.`);
@@ -1799,6 +1830,15 @@ async function applySession(session) {
     element('refresh-saved').disabled = true;
     controller?.abort();
     controller = null;
+    const privateImportsSelected = currentSource()?.type === 'profile-imports';
+    if (privateImportsSelected) {
+      boundaryLoadRevision += 1;
+      features = [];
+      boundaryUpdatedAt = null;
+      clearSelection();
+      element('results').replaceChildren();
+      element('result-count').textContent = '0';
+    }
     profiles = [];
     activeProfile = null;
     profileRevision += 1;
@@ -1810,13 +1850,15 @@ async function applySession(session) {
     element('invite-form').hidden = true;
     element('profile-status').textContent = 'Melde dich an, um Revierprofile zu sehen.';
     updateProfileControls();
-    if (features.length) renderResults();
+    if (privateImportsSelected) status('Anmelden, um private Revierimporte zu laden.');
+    else if (features.length) renderResults();
     else if (!currentSource() && !controller) status('Region auswaehlen, um Reviere zu laden.');
   } else if (previousId !== user.id) {
     savedProfiles = [];
     renderSavedProfiles();
     void loadSavedProfiles();
     element('login-dialog').close();
+    if (currentSource()?.type === 'profile-imports') void loadSelectedSource();
     if (selected) {
       element('profile-section').hidden = false;
       void loadProfiles();

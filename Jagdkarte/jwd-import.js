@@ -63,6 +63,72 @@ export function parseJwdImport(text) {
   };
 }
 
+function normalizeGeoJsonRing(points, label) {
+  if (!Array.isArray(points) || points.length < 3) throw new Error(`${label}: mindestens drei Punkte erforderlich.`);
+  const ring = points.map((point, index) => {
+    if (!Array.isArray(point) || point.length < 2 || !Number.isFinite(point[0]) || !Number.isFinite(point[1]) ||
+        point[0] < -180 || point[0] > 180 || point[1] < -90 || point[1] > 90) {
+      throw new Error(`${label}, Punkt ${index + 1}: ungueltige Koordinaten.`);
+    }
+    return [point[0], point[1]];
+  });
+  if (new Set(ring.map(point => `${point[0]},${point[1]}`)).size < 3) {
+    throw new Error(`${label}: mindestens drei unterschiedliche Punkte erforderlich.`);
+  }
+  const first = ring[0];
+  const last = ring.at(-1);
+  if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
+  return ring;
+}
+
+function normalizeGeoJsonGeometry(geometry, label) {
+  if (geometry?.type === 'Polygon' && Array.isArray(geometry.coordinates) && geometry.coordinates.length) {
+    return { type: 'Polygon', coordinates: geometry.coordinates.map((ring, index) =>
+      normalizeGeoJsonRing(ring, `${label}, Ring ${index + 1}`)) };
+  }
+  if (geometry?.type === 'MultiPolygon' && Array.isArray(geometry.coordinates) && geometry.coordinates.length) {
+    return { type: 'MultiPolygon', coordinates: geometry.coordinates.map((polygon, polygonIndex) => {
+      if (!Array.isArray(polygon) || !polygon.length) throw new Error(`${label}, Polygon ${polygonIndex + 1}: keine Ringe.`);
+      return polygon.map((ring, ringIndex) => normalizeGeoJsonRing(ring,
+        `${label}, Polygon ${polygonIndex + 1}, Ring ${ringIndex + 1}`));
+    }) };
+  }
+  throw new Error(`${label}: GeoJSON muss eine Polygon- oder MultiPolygon-Geometrie enthalten.`);
+}
+
+function geoJsonFeatureName(properties, fallback) {
+  const entries = Object.entries(properties || {});
+  const normalized = entries.map(([key, value]) => [normalizeType(key).replaceAll('_', ''), value]);
+  const preferred = normalized.find(([key, value]) =>
+    ['name', 'gemeinde', 'gemeindename', 'gen', 'bezeichnung', 'ort', 'ortsname', 'municipality'].includes(key) &&
+    typeof value === 'string' && value.trim());
+  return (preferred?.[1] || fallback).trim();
+}
+
+export function parseProfileImport(text, fileName = '') {
+  let data;
+  try { data = typeof text === 'string' ? JSON.parse(text) : text; }
+  catch { throw new Error('Die Datei enthaelt kein gueltiges JSON.'); }
+  if (!['Feature', 'FeatureCollection', 'Polygon', 'MultiPolygon'].includes(data?.type)) return parseJwdImport(data);
+
+  const fallbackName = String(fileName).replace(/\\/g, '/').split('/').at(-1).replace(/\.(geo)?json$/i, '').trim() || 'GeoJSON-Revier';
+  const sourceFeatures = data.type === 'FeatureCollection' ? data.features
+    : [data.type === 'Feature' ? data : { type: 'Feature', geometry: data }];
+  if (!Array.isArray(sourceFeatures) || !sourceFeatures.length) {
+    throw new Error('Die GeoJSON-Datei enthaelt keine Features.');
+  }
+  const polygonFeatures = sourceFeatures.filter(feature =>
+    ['Polygon', 'MultiPolygon'].includes(feature?.geometry?.type));
+  if (!polygonFeatures.length) throw new Error('Die GeoJSON-Datei enthaelt keine Polygon- oder MultiPolygon-Features.');
+  const candidates = polygonFeatures.map((feature, index) => ({
+    name: geoJsonFeatureName(feature.properties, polygonFeatures.length === 1 ? fallbackName : `Gemeinde ${index + 1}`),
+    geometry: normalizeGeoJsonGeometry(feature.geometry, `Feature ${index + 1}`),
+    facilities: []
+  }));
+  if (candidates.length === 1) return candidates[0];
+  return { name: fallbackName, facilities: [], candidates };
+}
+
 export function createJwdExport(name, geometry, markers = [], markerTypes = [], includeMarkers = false) {
   if (!geometry || !['Polygon', 'MultiPolygon'].includes(geometry.type)) {
     throw new Error('Die Reviergrenze ist kein Polygon.');
