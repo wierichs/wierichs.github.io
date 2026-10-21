@@ -1949,7 +1949,7 @@ element('download').addEventListener('click', () => {
   const name = featureName(selected, source);
   const fileName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').trim() || 'jagdbezirk';
   const blob = new Blob([JSON.stringify(createJwdExport(name, selected.geometry), null, 2)],
-    { type: 'application/json' });
+    { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
