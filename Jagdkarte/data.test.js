@@ -163,10 +163,27 @@ export async function runDataTests() {
   passed.push('JWD export uses title, explicit latitude/longitude and root lat/lng');
   const roundTrip = parseJwdImport(JSON.stringify(fullExport));
   assert(roundTrip.facilities.length === 2 && roundTrip.facilities[0].type === 'Bock' &&
-    roundTrip.facilities[1].type === 'unknown' && roundTrip.facilities[0].notes === 'Am Waldrand' &&
+    roundTrip.facilities[1].type === 'Hochsitz' && roundTrip.facilities[0].notes === 'Am Waldrand' &&
     mapJwdFacilities(roundTrip.facilities, exportTypes)[0].notes === 'Am Waldrand',
     'JWD full export lost persistent markers or included temporary markers.');
   passed.push('JWD full export includes all persistent types, titles, coordinates and notes, but no temporary markers');
+
+  const catalog = await fetch('./marker-types.json').then(response => response.json());
+  const catalogMarkers = catalog.types.map(type => ({
+    type_id: type.id, title: type.label, notes: `Notes: ${type.id}`,
+    latitude: 1.5, longitude: 1.5, expires_at: null
+  }));
+  const catalogExport = createJwdExport(imported.name, imported.geometry, catalogMarkers, catalog.types, true);
+  const permanentTypes = catalog.types.filter(type => !type.temporary);
+  const supportedIds = new Set(['hochsitz', 'bock', 'erdsitz', 'kirrung', 'leiter', 'salzlecke']);
+  assert(catalogExport.huntingGround.facilities.length === permanentTypes.length &&
+    catalogExport.huntingGround.facilities.every((facility, index) => {
+      const type = permanentTypes[index];
+      return facility.type === (supportedIds.has(type.id) ? type.label : 'Hochsitz') &&
+        facility.title === type.label && facility.notes === `Notes: ${type.id}` &&
+        facility.coordinate.latitude === 1.5 && facility.coordinate.longitude === 1.5;
+    }), 'JWD export did not map unsupported types to Hochsitz while preserving marker data.');
+  passed.push('JWD export preserves supported types and maps unsupported permanent types to Hochsitz');
 
   const multiGeometry = { type: 'MultiPolygon', coordinates: [imported.geometry.coordinates,
     [[[3, 3], [4, 3], [4, 4], [3, 3]]]] };

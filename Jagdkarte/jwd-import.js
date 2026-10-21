@@ -153,6 +153,10 @@ export function createJwdExport(name, geometry, markers = [], markerTypes = [], 
   }
   const convertRing = ring => ring.map(([longitude, latitude]) => ({ latitude, longitude }));
   const typesById = new Map(markerTypes.map(type => [type.id, type]));
+  const supportedTypes = new Map([
+    ['hochsitz', 'Hochsitz'], ['bock', 'Bock'], ['erdsitz', 'Erdsitz'],
+    ['kirrung', 'Kirrung'], ['leiter', 'Leiter'], ['salzlecke', 'Salzlecke']
+  ]);
   return {
     lat,
     lng,
@@ -163,7 +167,7 @@ export function createJwdExport(name, geometry, markers = [], markerTypes = [], 
       facilities: includeMarkers ? markers.filter(marker => marker.expires_at == null &&
         !typesById.get(marker.type_id)?.temporary).map(marker => ({
         coordinate: { latitude: marker.latitude, longitude: marker.longitude },
-        type: typesById.get(marker.type_id)?.label || marker.type_id,
+        type: supportedTypes.get(marker.type_id) || 'Hochsitz',
         title: marker.title || '',
         notes: marker.notes || ''
       })) : []

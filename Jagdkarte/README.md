@@ -191,6 +191,11 @@ features during browser verification. Search matches names, numbers, and scalar
 attributes, including EJB/GJB codes. Selecting a result highlights and fits its
 polygon; the boundary can be toggled or exported as a JWD file.
 
+When markers are included in a JWD export, the supported types are Hochsitz,
+Bock, Erdsitz, Kirrung, Leiter, and Salzlecke. Other permanent marker types are
+exported as Hochsitz, preserving their titles, notes, and coordinates. Temporary
+markers remain excluded. This compatibility mapping does not change stored markers.
+
 The panel has **Suche** and **Auswahl** tabs. Suche retains the region/search
 workflow; Auswahl lists the authenticated user's own and invited profiles across
 all configured regions, with region and Eigen/Geteilt labels. Supabase RLS filters
