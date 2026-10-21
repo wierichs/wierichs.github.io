@@ -1946,12 +1946,14 @@ element('marker-form').addEventListener('submit', async event => {
 element('download').addEventListener('click', () => {
   if (!selected) return;
   const source = currentSource();
-  const blob = new Blob([JSON.stringify(createJwdExport(featureName(selected, source), selected.geometry), null, 2)],
+  const name = featureName(selected, source);
+  const fileName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').trim() || 'jagdbezirk';
+  const blob = new Blob([JSON.stringify(createJwdExport(name, selected.geometry), null, 2)],
     { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'jagdbezirk.jwd';
+  link.download = `${fileName}.jwd`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });

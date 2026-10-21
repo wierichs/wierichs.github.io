@@ -193,7 +193,8 @@ export async function runAppTests() {
     try {
       control('download').click();
       const exportedProfile = JSON.parse(await exportedBlob.text());
-      assert(exportedFilename.endsWith('.jwd') && exportedProfile.title === control('selected-name').textContent &&
+      assert(exportedFilename === `${exportedProfile.title}.jwd` &&
+        exportedProfile.title === control('selected-name').textContent &&
         Array.isArray(exportedProfile.huntingGround?.borders),
       'Selected district download should always produce a named JWD file.');
     } finally {
