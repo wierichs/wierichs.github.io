@@ -189,8 +189,7 @@ region cancels an in-flight request for the previous one. Bielefeld,
 Nordrhein-Westfalen, is one available source; its live WFS returned 63 polygon
 features during browser verification. Search matches names, numbers, and scalar
 attributes, including EJB/GJB codes. Selecting a result highlights and fits its
-polygon; the boundary can be toggled or exported as GeoJSON with source and
-license information.
+polygon; the boundary can be toggled or exported as a JWD file.
 
 The panel has **Suche** and **Auswahl** tabs. Suche retains the region/search
 workflow; Auswahl lists the authenticated user's own and invited profiles across

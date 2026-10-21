@@ -1,4 +1,5 @@
 import { boundaries, loadBoundaries, featureName } from './data.js';
+import { createJwdExport } from './jwd-import.js';
 
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
@@ -1945,14 +1946,12 @@ element('marker-form').addEventListener('submit', async event => {
 element('download').addEventListener('click', () => {
   if (!selected) return;
   const source = currentSource();
-  const blob = new Blob([JSON.stringify({ type: 'FeatureCollection', features: [selected],
-    source: source.metadataUrl, attribution: source.attribution, license: source.license,
-    sourceSnapshotDate: source.snapshotDate || null, retrievedAt: new Date().toISOString()
-  }, null, 2)], { type: 'application/geo+json' });
+  const blob = new Blob([JSON.stringify(createJwdExport(featureName(selected, source), selected.geometry), null, 2)],
+    { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'jagdbezirk.geojson';
+  link.download = 'jagdbezirk.jwd';
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });

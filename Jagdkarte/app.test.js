@@ -184,6 +184,23 @@ export async function runAppTests() {
     change('source', 'user-imports');
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
+    let exportedBlob = null;
+    let exportedFilename = '';
+    const originalCreateObjectURL = frame.URL.createObjectURL;
+    const originalAnchorClick = frame.HTMLAnchorElement.prototype.click;
+    frame.URL.createObjectURL = blob => { exportedBlob = blob; return 'blob:test-export'; };
+    frame.HTMLAnchorElement.prototype.click = function() { exportedFilename = this.download; };
+    try {
+      control('download').click();
+      const exportedProfile = JSON.parse(await exportedBlob.text());
+      assert(exportedFilename.endsWith('.jwd') && exportedProfile.title === control('selected-name').textContent &&
+        Array.isArray(exportedProfile.huntingGround?.borders),
+      'Selected district download should always produce a named JWD file.');
+    } finally {
+      frame.URL.createObjectURL = originalCreateObjectURL;
+      frame.HTMLAnchorElement.prototype.click = originalAnchorClick;
+    }
+    passed.push('Selected district download always exports a named JWD file');
     await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
     state.mode = true;
     change('profile-list', 'test-profile');
