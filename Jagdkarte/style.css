@@ -103,6 +103,7 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .marker-form-popup #marker-form label:first-of-type { margin-top: 0; }
 .marker-form-popup #marker-form input, .marker-form-popup #marker-form select { margin-bottom: 8px; }
 .marker-form-popup #marker-form select { width: 100%; }
+.marker-form-popup #marker-form .profile-actions { position: sticky; bottom: -1px; z-index: 1; padding: 8px 0 2px; background: var(--paper); }
 .profile-marker-popup { min-width: 150px; }
 .profile-marker-popup strong, .profile-marker-popup span { display: block; overflow-wrap: anywhere; }
 .profile-marker-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }

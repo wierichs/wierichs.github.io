@@ -32,6 +32,7 @@ const markerForm = element('marker-form');
 const markerFormHome = markerForm.parentElement;
 const markerFormPopup = L.popup({ className: 'marker-form-popup', minWidth: 220, maxWidth: 320,
   autoPan: true, autoPanPadding: [16, 16], closeOnClick: false });
+markerFormPopup.on('popupopen', () => window.lucide?.createIcons({ root: markerForm }));
 const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

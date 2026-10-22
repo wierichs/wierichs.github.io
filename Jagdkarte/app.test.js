@@ -213,6 +213,13 @@ export async function runAppTests() {
     const popupMarkerForm = control('marker-form');
     assert(!popupMarkerForm.hidden && popupMarkerForm.closest('.leaflet-popup') &&
       control('map-surface').contains(popupMarkerForm), 'New marker form should open as a map popup.');
+    const saveMarkerButton = popupMarkerForm.querySelector('button[type="submit"]');
+    const cancelMarkerButton = control('cancel-marker');
+    assert(frame.getComputedStyle(popupMarkerForm.querySelector('.profile-actions')).position === 'sticky' &&
+      saveMarkerButton.getAttribute('aria-label') === 'Markierung speichern' && saveMarkerButton.querySelector('svg') &&
+      cancelMarkerButton.getAttribute('aria-label') === 'Abbrechen' && cancelMarkerButton.title === 'Abbrechen' &&
+      cancelMarkerButton.querySelector('svg'),
+    'The compact save and cancel icon actions should remain accessible in the map popup.');
     control('cancel-marker').click();
     await waitFor(() => !frame.document.querySelector('#map .leaflet-popup #marker-form'));
     assert(popupMarkerForm.hidden && popupMarkerForm.parentElement === control('profile-section'),
