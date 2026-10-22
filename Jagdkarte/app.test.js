@@ -188,6 +188,14 @@ export async function runAppTests() {
     state.mode = true;
     change('profile-list', 'test-profile');
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
+    const addMarkerButton = control('add-marker');
+    assert(addMarkerButton.parentElement.classList.contains('map-toolbar') && !addMarkerButton.hidden &&
+      !control('profile-section').querySelector('#add-marker'), 'Marker placement should be available from the map toolbar.');
+    addMarkerButton.click();
+    assert(addMarkerButton.getAttribute('aria-pressed') === 'true', 'Map marker placement did not activate.');
+    addMarkerButton.click();
+    assert(addMarkerButton.getAttribute('aria-pressed') === 'false', 'Map marker placement did not cancel.');
+    passed.push('Marker placement is available from the map toolbar');
     let exportedBlob = null;
     let exportedFilename = '';
     const originalCreateObjectURL = frame.URL.createObjectURL;
