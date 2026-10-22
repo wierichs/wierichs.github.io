@@ -28,6 +28,10 @@ function writeLocationConsent(profile, consent) {
 }
 const map = L.map('map').setView([51.1, 10.4], 6);
 const mapSurface = element('map-surface');
+const markerForm = element('marker-form');
+const markerFormHome = markerForm.parentElement;
+const markerFormPopup = L.popup({ className: 'marker-form-popup', minWidth: 220, maxWidth: 320,
+  autoPan: true, autoPanPadding: [16, 16], closeOnClick: false });
 const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -125,15 +129,20 @@ element('toggle-map-legend').addEventListener('click', () => {
   element('toggle-map-legend').setAttribute('aria-label', label);
   element('toggle-map-legend').title = label;
 });
-element('toggle-search-panel').addEventListener('click', () => {
-  const collapsed = element('app-layout').classList.toggle('search-collapsed');
-  const label = collapsed ? 'Reviersuche aufklappen' : 'Reviersuche einklappen';
+function setSearchPanelCollapsed(collapsed) {
+  element('app-layout').classList.toggle('search-collapsed', collapsed);
+  const panelName = selected ? 'Revierbereich' : 'Reviersuche';
+  const label = `${panelName} ${collapsed ? 'aufklappen' : 'einklappen'}`;
   element('search-panel-body').hidden = collapsed;
   element('toggle-search-panel').setAttribute('aria-expanded', String(!collapsed));
   element('toggle-search-panel').setAttribute('aria-label', label);
   element('toggle-search-panel').title = label;
   element('collapse-search-icon').toggleAttribute('hidden', collapsed);
   element('expand-search-icon').toggleAttribute('hidden', !collapsed);
+}
+element('toggle-search-panel').addEventListener('click', () => {
+  const collapsed = !element('app-layout').classList.contains('search-collapsed');
+  setSearchPanelCollapsed(collapsed);
 });
 map.on('baselayerchange', event => {
   if (event.name === 'Satellit') satelliteTileWarningShown = false;
@@ -580,15 +589,19 @@ async function loadOwnDisplayName() {
   element('display-name').value = data?.display_name || '';
 }
 
-function resetMarkerPlacement() {
+function resetMarkerPlacement(closePopup = true) {
   if (placementMode) hideMapStatus();
   placementMode = false;
   markerCoordinates = null;
-  element('marker-form').hidden = true;
+  markerForm.hidden = true;
+  if (markerForm.parentElement !== markerFormHome) markerFormHome.append(markerForm);
+  if (closePopup && map.hasLayer(markerFormPopup)) map.closePopup(markerFormPopup);
   element('add-marker').setAttribute('aria-pressed', 'false');
   element('marker-title').value = '';
   element('marker-notes').value = '';
 }
+
+markerFormPopup.on('popupclose', () => resetMarkerPlacement(false));
 
 function updateProfileControls() {
   const canEdit = canEditProfile();
@@ -1313,6 +1326,8 @@ function clearSelection() {
   if (boundary) map.removeLayer(boundary);
   boundary = null;
   selected = null;
+  element('app-layout').classList.remove('has-selection');
+  setSearchPanelCollapsed(false);
   updateSavedProfileSelection();
   profiles = [];
   activeProfile = null;
@@ -1356,6 +1371,8 @@ function selectFeature(feature, button, preferredProfileId) {
   });
   button?.setAttribute('aria-pressed', 'true');
   element('selection').hidden = false;
+  element('app-layout').classList.add('has-selection');
+  setSearchPanelCollapsed(true);
   element('fit').disabled = false;
   element('profile-section').hidden = !user;
   updateSavedProfileSelection();
@@ -1875,7 +1892,9 @@ map.on('click', event => {
     markerCoordinates = event.latlng;
     placementMode = false;
     element('marker-coordinates').textContent = `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`;
-    element('marker-form').hidden = false;
+    markerForm.hidden = false;
+    markerFormPopup.options.maxHeight = Math.max(160, Math.min(420, map.getSize().y - 72));
+    markerFormPopup.setLatLng(event.latlng).setContent(markerForm).openOn(map);
     element('add-marker').setAttribute('aria-pressed', 'false');
     element('marker-title').focus();
     return;

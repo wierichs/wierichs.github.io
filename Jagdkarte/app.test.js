@@ -167,12 +167,14 @@ export async function runAppTests() {
     assert(satelliteButton.getAttribute('aria-pressed') === 'false', 'Satellite switch did not return to OSM.');
     passed.push('App offers satellite imagery alongside OSM with a configured key');
     const legendButton = control('toggle-map-legend');
-    legendButton.click();
     assert(control('map-key').hidden && legendButton.getAttribute('aria-expanded') === 'false' &&
-      legendButton.getAttribute('aria-label') === 'Legende anzeigen', 'Legend did not collapse accessibly.');
+      legendButton.getAttribute('aria-label') === 'Legende anzeigen', 'Legend should start collapsed accessibly.');
     legendButton.click();
     assert(!control('map-key').hidden && legendButton.getAttribute('aria-expanded') === 'true' &&
       legendButton.getAttribute('aria-label') === 'Legende ausblenden', 'Legend did not expand accessibly.');
+    legendButton.click();
+    assert(control('map-key').hidden && legendButton.getAttribute('aria-expanded') === 'false' &&
+      legendButton.getAttribute('aria-label') === 'Legende anzeigen', 'Legend did not collapse accessibly.');
     passed.push('App legend can be collapsed and expanded accessibly');
     const change = (id, value) => {
       control(id).value = value;
@@ -184,10 +186,38 @@ export async function runAppTests() {
     change('source', 'user-imports');
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
+    assert(frame.document.querySelector('#app-layout').classList.contains('search-collapsed') &&
+      control('search-panel-body').hidden && control('toggle-search-panel').getAttribute('aria-expanded') === 'false',
+    'Selecting a district should collapse the search controls.');
+    const mapLayout = control('app-layout');
+    assert(mapLayout.classList.contains('has-selection') &&
+      frame.getComputedStyle(control('search-panel')).position === 'absolute' &&
+      Math.abs(control('map-surface').getBoundingClientRect().width - mapLayout.getBoundingClientRect().width) < 1,
+    'The selected-revier panel should overlay the full-width map.');
+    control('toggle-search-panel').click();
+    assert(!control('search-panel-body').hidden && control('toggle-search-panel').getAttribute('aria-expanded') === 'true',
+      'The collapsed search panel should remain manually expandable.');
+    control('toggle-search-panel').click();
     await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
     state.mode = true;
     change('profile-list', 'test-profile');
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
+    await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    const placementMarker = frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon');
+    const placementBounds = placementMarker.getBoundingClientRect();
+    control('add-marker').click();
+    control('map').dispatchEvent(new frame.MouseEvent('click', { bubbles: true,
+      clientX: placementBounds.left + placementBounds.width / 2,
+      clientY: placementBounds.top + placementBounds.height / 2 }));
+    await waitFor(() => frame.document.querySelector('#map .leaflet-popup #marker-form'));
+    const popupMarkerForm = control('marker-form');
+    assert(!popupMarkerForm.hidden && popupMarkerForm.closest('.leaflet-popup') &&
+      control('map-surface').contains(popupMarkerForm), 'New marker form should open as a map popup.');
+    control('cancel-marker').click();
+    await waitFor(() => !frame.document.querySelector('#map .leaflet-popup #marker-form'));
+    assert(popupMarkerForm.hidden && popupMarkerForm.parentElement === control('profile-section'),
+      'Cancel should close the map popup and restore the hidden marker form.');
+    passed.push('New marker form opens on the map and restores cleanly on cancel');
     const addMarkerButton = control('add-marker');
     assert(addMarkerButton.parentElement.classList.contains('map-toolbar') && !addMarkerButton.hidden &&
       !control('profile-section').querySelector('#add-marker'), 'Marker placement should be available from the map toolbar.');
@@ -383,7 +413,8 @@ export async function runAppTests() {
     control('clear').click();
     state.pendingMode();
     await waitFor(() => !control('hunting-mode').disabled);
-    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 7,
+    assert(control('selection').hidden && control('presence-status').hidden && state.gpsRequests === 7 &&
+      !control('app-layout').classList.contains('has-selection') && !control('search-panel-body').hidden,
     'A stale hunting mode write restarted profile UI or GPS.');
     passed.push('App ignores a pending hunting-mode response after selection changes');
 

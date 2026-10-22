@@ -42,10 +42,16 @@ aside { display: flex; flex-direction: column; min-height: 0; padding: 24px; ove
 #saved-profiles button[aria-pressed=true] { background: #e4efe8; box-shadow: inset 3px 0 var(--green); }
 #saved-profiles small { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
 main.search-collapsed { grid-template-columns: 70px minmax(0, 1fr); }
-main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: 350px minmax(0, 1fr); }
 main.search-collapsed aside { padding: 12px; }
 main.search-collapsed .panel-title { display: none; }
 main.search-collapsed:not(:has(#selection:not([hidden]))) .source-note { display: none; }
+main.has-selection { position: relative; grid-template-columns: minmax(0, 1fr); }
+main.has-selection aside { position: absolute; inset: 12px auto 12px 12px; z-index: 600; grid-row: auto; grid-column: auto; width: min(350px, calc(100% - 24px)); padding: 20px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 20px #20342830; }
+main.has-selection.search-collapsed aside { width: 70px; padding: 12px; overflow: hidden; }
+main.has-selection.search-collapsed .panel-heading { justify-content: center; }
+main.has-selection.search-collapsed #search-panel-body,
+main.has-selection.search-collapsed #selection,
+main.has-selection.search-collapsed .source-note { display: none; }
 .eyebrow { color: var(--muted); font-size: 10px; }
 h1 { font-size: 29px; margin: 8px 0 25px; }
 h2 { font-size: 16px; margin: 0; overflow-wrap: anywhere; }
@@ -92,6 +98,11 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 .boundary-edit-handle.leaflet-marker-draggable { cursor: grab; }
 .boundary-edit-handle.leaflet-marker-dragging { cursor: grabbing; }
 #invite-form, #marker-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.marker-form-popup #marker-form { width: min(260px, calc(100vw - 100px)); margin: 0; padding: 0; border: 0; }
+.marker-form-popup #marker-form label { margin-top: 10px; }
+.marker-form-popup #marker-form label:first-of-type { margin-top: 0; }
+.marker-form-popup #marker-form input, .marker-form-popup #marker-form select { margin-bottom: 8px; }
+.marker-form-popup #marker-form select { width: 100%; }
 .profile-marker-popup { min-width: 150px; }
 .profile-marker-popup strong, .profile-marker-popup span { display: block; overflow-wrap: anywhere; }
 .profile-marker-popup span { margin-top: 5px; color: var(--muted); font-size: 12px; }
@@ -147,18 +158,32 @@ dialog::backdrop { background: #152a2260; }
   #account-button { width: 42px; flex: 0 0 42px; padding: 9px; font-size: 12px; } #account-button span { display: none; }
   main { height: calc(100dvh - 60px); grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }
   main.search-collapsed { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 68px; }
-  main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }
   #toggle-search-panel svg { transform: none; }
   .map-surface { grid-row: 1; } aside { grid-row: 2; padding: 18px; border-right: 0; border-top: 1px solid var(--line); }
+  main.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  main.has-selection .map-surface { grid-row: 1; grid-column: 1; }
+  main.has-selection aside { inset: 12px; width: auto; max-height: calc(100% - 24px); padding: 18px; border: 1px solid var(--line); border-radius: 6px; }
+  main.has-selection.search-collapsed aside { inset: auto 12px 12px; width: auto; height: 72px; min-height: 72px; max-height: 72px; padding: 12px 16px; }
+  main.has-selection.search-collapsed .panel-heading { position: absolute; top: 12px; right: 12px; z-index: 1; width: 42px; height: 42px; }
+  main.has-selection.search-collapsed #selection { display: block; margin: 0; padding: 0 50px 0 0; border: 0; }
+  main.has-selection.search-collapsed #selection .selection-heading { min-height: 42px; }
+  main.has-selection.search-collapsed #clear,
+  main.has-selection.search-collapsed #details,
+  main.has-selection.search-collapsed .selection-actions,
+  main.has-selection.search-collapsed .legal,
+  main.has-selection.search-collapsed #profile-section { display: none; }
   h1 { font-size: 23px; margin-bottom: 16px; } #results { max-height: 200px; }
   .map-legend { bottom: 35px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
 }
 @media (max-width: 700px) and (orientation: landscape) {
   main { grid-template-columns: minmax(220px, 34vw) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   main.search-collapsed { grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-  main.search-collapsed:has(#selection:not([hidden])) { grid-template-columns: minmax(220px, 34vw) minmax(0, 1fr); }
   aside { grid-row: 1; grid-column: 1; }
   main.search-collapsed aside { padding: 6px; }
   .map-surface { grid-row: 1; grid-column: 2; }
+  main.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  main.has-selection .map-surface { grid-row: 1; grid-column: 1; }
+  main.has-selection aside { inset: 12px; }
+  main.has-selection.search-collapsed aside { inset: auto 12px 12px; height: 68px; min-height: 68px; max-height: 68px; }
 }
 @media (prefers-reduced-motion: no-preference) { aside { animation: reveal .35s ease-out; } @keyframes reveal { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } } }
