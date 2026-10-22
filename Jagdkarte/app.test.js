@@ -184,6 +184,10 @@ export async function runAppTests() {
     change('source', 'user-imports');
     await waitFor(() => control('results').querySelector('button'));
     control('results').querySelector('button').click();
+    await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
+    state.mode = true;
+    change('profile-list', 'test-profile');
+    await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
     let exportedBlob = null;
     let exportedFilename = '';
     const originalCreateObjectURL = frame.URL.createObjectURL;
@@ -192,21 +196,19 @@ export async function runAppTests() {
     frame.HTMLAnchorElement.prototype.click = function() { exportedFilename = this.download; };
     try {
       control('download').click();
+      await waitFor(() => exportedBlob !== null);
       const exportedProfile = JSON.parse(await exportedBlob.text());
       assert(exportedBlob.type === 'application/octet-stream' &&
         exportedFilename === `${exportedProfile.title}.jwd` &&
         exportedProfile.title === control('selected-name').textContent &&
-        Array.isArray(exportedProfile.huntingGround?.borders),
-      'Selected district download should always produce a named JWD file.');
+        exportedProfile.huntingGround.facilities.length === 1 &&
+        exportedProfile.huntingGround.facilities[0].title === 'Testmarker',
+      'Selected profile download should include its persistent markers in a named JWD file.');
     } finally {
       frame.URL.createObjectURL = originalCreateObjectURL;
       frame.HTMLAnchorElement.prototype.click = originalAnchorClick;
     }
-    passed.push('Selected district download always exports a named JWD file');
-    await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
-    state.mode = true;
-    change('profile-list', 'test-profile');
-    await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
+    passed.push('Selected district download includes persistent profile markers in a named JWD file');
     assert(!control('edit-boundary').hidden, 'An editor should be able to edit an imported boundary.');
     control('edit-boundary').click();
     await waitFor(() => frame.document.querySelector('.boundary-edit-midpoint'));

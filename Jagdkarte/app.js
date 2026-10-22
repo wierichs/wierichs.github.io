@@ -1943,12 +1943,25 @@ element('marker-form').addEventListener('submit', async event => {
     button.disabled = false;
   }
 });
-element('download').addEventListener('click', () => {
+element('download').addEventListener('click', async () => {
   if (!selected) return;
+  const feature = selected;
   const source = currentSource();
+  const profile = activeProfile;
   const name = featureName(selected, source);
   const fileName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').trim() || 'jagdbezirk';
-  const blob = new Blob([JSON.stringify(createJwdExport(name, selected.geometry), null, 2)],
+  let markers = [];
+  if (profile && user && supabaseClient) {
+    const { data, error } = await supabaseClient.from('hunting_markers')
+      .select('type_id,title,notes,latitude,longitude,expires_at').eq('profile_id', profile.id).order('created_at');
+    if (selected !== feature || activeProfile?.id !== profile.id) return;
+    if (error) {
+      profileStatus(`Markierungen konnten nicht exportiert werden: ${error.message}`);
+      return;
+    }
+    markers = data || [];
+  }
+  const blob = new Blob([JSON.stringify(createJwdExport(name, feature.geometry, markers, markerTypes, Boolean(profile)), null, 2)],
     { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
