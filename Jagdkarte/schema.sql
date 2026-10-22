@@ -70,6 +70,7 @@ alter table public.hunting_markers
 alter table public.hunting_profiles add column if not exists boundary_geojson jsonb;
 alter table public.hunting_profiles add column if not exists hunting_mode boolean not null default false;
 alter table public.hunting_markers add column if not exists expires_at timestamptz;
+update public.hunting_markers set type_id = 'bock' where type_id = 'drueckjagdbock';
 update public.hunting_markers set expires_at = created_at + interval '48 hours'
   where type_id in ('anschuss', 'wildsichtung', 'standplatz') and expires_at is null;
 

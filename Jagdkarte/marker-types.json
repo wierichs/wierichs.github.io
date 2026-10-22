@@ -67,14 +67,6 @@
       "popupAnchor": [0, -42]
     },
     {
-      "id": "drueckjagdbock",
-      "label": "Drückjagdbock",
-      "iconUrl": "./markers/drueckjagdbock.svg",
-      "iconSize": [40, 48],
-      "iconAnchor": [20, 46],
-      "popupAnchor": [0, -42]
-    },
-    {
       "id": "kirrung",
       "label": "Kirrung",
       "iconUrl": "./markers/kirrung.svg",

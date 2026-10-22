@@ -202,7 +202,7 @@ export async function runAppTests() {
         exportedFilename === `${exportedProfile.title}.jwd` &&
         exportedProfile.title === control('selected-name').textContent &&
         exportedProfile.huntingGround.facilities.length === 1 &&
-        exportedProfile.huntingGround.facilities[0].title === 'Testmarker',
+        exportedProfile.huntingGround.facilities[0].title === 'Sonstiges: Testmarker',
       'Selected profile download should include its persistent markers in a named JWD file.');
     } finally {
       frame.URL.createObjectURL = originalCreateObjectURL;

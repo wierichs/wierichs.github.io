@@ -169,8 +169,12 @@ export async function runDataTests() {
   passed.push('JWD full export includes all persistent types, titles, coordinates and notes, but no temporary markers');
 
   const catalog = await fetch('./marker-types.json').then(response => response.json());
+  assert(catalog.types.some(type => type.id === 'bock' && type.label === 'Bock') &&
+    !catalog.types.some(type => type.id === 'drueckjagdbock'),
+  'Drueckjagdbock should be represented by the Bock marker type.');
+  passed.push('Marker catalog consolidates Drueckjagdbock into Bock');
   const catalogMarkers = catalog.types.map(type => ({
-    type_id: type.id, title: type.label, notes: `Notes: ${type.id}`,
+    type_id: type.id, title: `Titel ${type.id}`, notes: `Notes: ${type.id}`,
     latitude: 1.5, longitude: 1.5, expires_at: null
   }));
   const catalogExport = createJwdExport(imported.name, imported.geometry, catalogMarkers, catalog.types, true);
@@ -180,10 +184,11 @@ export async function runDataTests() {
     catalogExport.huntingGround.facilities.every((facility, index) => {
       const type = permanentTypes[index];
       return facility.type === (supportedIds.has(type.id) ? type.label : 'Hochsitz') &&
-        facility.title === type.label && facility.notes === `Notes: ${type.id}` &&
+        facility.title === (supportedIds.has(type.id) ? `Titel ${type.id}` : `${type.label}: Titel ${type.id}`) &&
+        facility.notes === `Notes: ${type.id}` &&
         facility.coordinate.latitude === 1.5 && facility.coordinate.longitude === 1.5;
-    }), 'JWD export did not map unsupported types to Hochsitz while preserving marker data.');
-  passed.push('JWD export preserves supported types and maps unsupported permanent types to Hochsitz');
+    }), 'JWD export did not map unsupported types to Hochsitz and preserve their original type in the title.');
+  passed.push('JWD export prefixes the original type when mapping permanent markers to Hochsitz');
 
   const multiGeometry = { type: 'MultiPolygon', coordinates: [imported.geometry.coordinates,
     [[[3, 3], [4, 3], [4, 4], [3, 3]]]] };

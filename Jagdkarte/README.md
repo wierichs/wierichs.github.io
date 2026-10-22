@@ -113,9 +113,9 @@ Signed-in users can import `.jwd` JSON files or `.geojson` boundaries from the *
 stores the boundary and permanent facilities as a private owner profile; invited
 members can access it through the normal profile-sharing controls. Pacified areas
 become polygon holes. Facilities outside the boundary are preserved after a
-confirmation warning. `Bock`, `Erdsitz`, and `Salzlecke` have distinct marker
-types but currently use the **Sonstiges** icon. Unknown types also use that icon,
-with the original type retained in the marker notes.
+confirmation warning. The `Bock` marker type also covers Drueckjagdbock. Unknown
+types use the **Sonstiges** icon, with the original type retained in the marker
+notes.
 
 When an invitee selects a shared profile while Jagdmodus is active, the profile
 and its shared markers remain available without sharing that user's location.

@@ -165,12 +165,17 @@ export function createJwdExport(name, geometry, markers = [], markerTypes = [], 
       borders: polygons.map(polygon => convertRing(polygon[0])),
       pacifiedAreas: polygons.flatMap(polygon => polygon.slice(1).map(convertRing)),
       facilities: includeMarkers ? markers.filter(marker => marker.expires_at == null &&
-        !typesById.get(marker.type_id)?.temporary).map(marker => ({
-        coordinate: { latitude: marker.latitude, longitude: marker.longitude },
-        type: supportedTypes.get(marker.type_id) || 'Hochsitz',
-        title: marker.title || '',
-        notes: marker.notes || ''
-      })) : []
+        !typesById.get(marker.type_id)?.temporary).map(marker => {
+        const mappedType = supportedTypes.get(marker.type_id);
+        const originalType = typesById.get(marker.type_id)?.label || marker.type_id || 'Unbekannt';
+        const title = marker.title || '';
+        return {
+          coordinate: { latitude: marker.latitude, longitude: marker.longitude },
+          type: mappedType || 'Hochsitz',
+          title: mappedType ? title : `${originalType}: ${title}`,
+          notes: marker.notes || ''
+        };
+      }) : []
     }
   };
 }
