@@ -52,6 +52,11 @@ main.has-selection.search-collapsed .panel-heading { justify-content: center; }
 main.has-selection.search-collapsed #search-panel-body,
 main.has-selection.search-collapsed #selection,
 main.has-selection.search-collapsed .source-note { display: none; }
+main.selection-search-active #selection #details,
+main.selection-search-active #selection .selection-actions,
+main.selection-search-active #selection .legal,
+main.selection-search-active #selection #profile-section { display: none; }
+main.selection-search-active #selection { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .eyebrow { color: var(--muted); font-size: 10px; }
 h1 { font-size: 29px; margin: 8px 0 25px; }
 h2 { font-size: 16px; margin: 0; overflow-wrap: anywhere; }

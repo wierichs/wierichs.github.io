@@ -76,6 +76,7 @@ const mapSourceFeatures = new Map();
 let mapFeatureSearchRevision = 0;
 let mapFeatureSearchController = null;
 let selected = null;
+let selectedPanelView = 'details';
 let savedSelection = readSavedSelection();
 let boundary = null;
 let locationLayer = null;
@@ -137,7 +138,7 @@ function setSearchPanelCollapsed(collapsed) {
   element('app-layout').classList.toggle('search-collapsed', collapsed);
   const panelName = selected ? 'Revierbereich' : 'Reviersuche';
   const label = `${panelName} ${collapsed ? 'aufklappen' : 'einklappen'}`;
-  element('search-panel-body').hidden = collapsed;
+  element('search-panel-body').hidden = collapsed || (selected && selectedPanelView !== 'search');
   element('toggle-search-panel').setAttribute('aria-expanded', String(!collapsed));
   element('toggle-search-panel').setAttribute('aria-label', label);
   element('toggle-search-panel').title = label;
@@ -147,6 +148,21 @@ function setSearchPanelCollapsed(collapsed) {
 element('toggle-search-panel').addEventListener('click', () => {
   const collapsed = !element('app-layout').classList.contains('search-collapsed');
   setSearchPanelCollapsed(collapsed);
+});
+function setSelectedPanelView(view) {
+  selectedPanelView = view;
+  const showingSearch = Boolean(selected && view === 'search');
+  element('app-layout').classList.toggle('selection-search-active', showingSearch);
+  const label = showingSearch ? 'Zum Revier zurueckkehren' : 'Suche und Auswahl anzeigen';
+  element('toggle-selection-view').hidden = !selected;
+  element('toggle-selection-view').setAttribute('aria-label', label);
+  element('toggle-selection-view').title = label;
+  element('show-search-icon').toggleAttribute('hidden', showingSearch);
+  element('show-selection-icon').toggleAttribute('hidden', !showingSearch);
+  setSearchPanelCollapsed(element('app-layout').classList.contains('search-collapsed'));
+}
+element('toggle-selection-view').addEventListener('click', () => {
+  setSelectedPanelView(selectedPanelView === 'details' ? 'search' : 'details');
 });
 map.on('baselayerchange', event => {
   if (event.name === 'Satellit') satelliteTileWarningShown = false;
@@ -1332,7 +1348,10 @@ function clearSelection() {
   if (boundary) map.removeLayer(boundary);
   boundary = null;
   selected = null;
+  selectedPanelView = 'search';
   element('app-layout').classList.remove('has-selection');
+  element('app-layout').classList.remove('selection-search-active');
+  element('toggle-selection-view').hidden = true;
   setSearchPanelCollapsed(false);
   updateSavedProfileSelection();
   profiles = [];
@@ -1359,6 +1378,7 @@ function clearSelection() {
 function selectFeature(feature, button, preferredProfileId) {
   clearSelection();
   selected = feature;
+  setSelectedPanelView('details');
   const source = currentSource();
   const featureId = selectedFeatureId();
   saveSelection(featureId && source.type !== 'profile-imports' ? { sourceId: source.id, featureId } : null);

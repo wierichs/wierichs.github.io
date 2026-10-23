@@ -216,8 +216,16 @@ export async function runAppTests() {
       Math.abs(control('map-surface').getBoundingClientRect().width - mapLayout.getBoundingClientRect().width) < 1,
     'The selected-revier panel should overlay the full-width map.');
     control('toggle-search-panel').click();
-    assert(!control('search-panel-body').hidden && control('toggle-search-panel').getAttribute('aria-expanded') === 'true',
-      'The collapsed search panel should remain manually expandable.');
+    assert(control('search-panel-body').hidden && !control('selection').hidden &&
+      control('toggle-search-panel').getAttribute('aria-expanded') === 'true',
+    'Opening the selected-revier panel should show details without the search list.');
+    control('toggle-selection-view').click();
+    assert(!control('search-panel-body').hidden && frame.getComputedStyle(control('details')).display === 'none' &&
+      control('toggle-selection-view').getAttribute('aria-label') === 'Zum Revier zurueckkehren',
+    'Search mode should hide detailed profile controls and keep a route back to the district.');
+    control('toggle-selection-view').click();
+    assert(control('search-panel-body').hidden && frame.getComputedStyle(control('details')).display !== 'none',
+      'The selected-revier view should be restored by its toggle.');
     control('toggle-search-panel').click();
     await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
     state.mode = true;
