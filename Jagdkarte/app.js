@@ -72,6 +72,9 @@ let supabaseClient = null;
 let authPending = false;
 let requestedEmail = null;
 let features = [];
+const mapSourceFeatures = new Map();
+let mapFeatureSearchRevision = 0;
+let mapFeatureSearchController = null;
 let selected = null;
 let savedSelection = readSavedSelection();
 let boundary = null;
@@ -177,6 +180,7 @@ function showMapStatus(message, type = 'info') {
 element('close-map-status').addEventListener('click', hideMapStatus);
 
 function setDistrictTab(name, focus = false, refreshSaved = true) {
+  if (name !== 'search') cancelMapFeatureSearch();
   for (const tabName of ['search', 'saved']) {
     const active = name === tabName;
     const tab = element(`${tabName}-tab`);
@@ -1321,6 +1325,7 @@ async function loadProfiles(preferredId) {
 }
 
 function clearSelection() {
+  cancelMapFeatureSearch();
   profileActivationRevision += 1;
   void stopProfileLocation();
   stopBoundaryEditing(true);
@@ -1413,6 +1418,101 @@ function pointInFeature(point, feature) {
 
 function pointInSelectedFeature(point) {
   return pointInFeature(point, selected);
+}
+
+function cancelMapFeatureSearch() {
+  if (!mapFeatureSearchController) return;
+  mapFeatureSearchRevision += 1;
+  mapFeatureSearchController.abort();
+  mapFeatureSearchController = null;
+  hideMapStatus();
+}
+
+function isCurrentMapFeatureSearch(revision, requestController) {
+  return mapFeatureSearchRevision === revision && mapFeatureSearchController === requestController &&
+    !requestController.signal.aborted && element('search-tab').getAttribute('aria-selected') === 'true';
+}
+
+async function loadMapSearchFeatures(source, requestController) {
+  if (source.id === currentSource()?.id && features.length) {
+    const loaded = { features, updatedAt: boundaryUpdatedAt };
+    mapSourceFeatures.set(source.id, loaded);
+    return loaded;
+  }
+  const inMemory = mapSourceFeatures.get(source.id);
+  if (inMemory) return inMemory;
+  const cached = await readBoundaryCache(source);
+  if (requestController.signal.aborted) return null;
+  if (cached) {
+    mapSourceFeatures.set(source.id, cached);
+    return cached;
+  }
+
+  const sourceController = new AbortController();
+  const abortSource = () => sourceController.abort(requestController.signal.reason);
+  requestController.signal.addEventListener('abort', abortSource, { once: true });
+  const timeout = setTimeout(() => sourceController.abort('timeout'), 20000);
+  try {
+    const loadedFeatures = await loadBoundaries(source, sourceController.signal);
+    if (requestController.signal.aborted) return null;
+    const loaded = { features: loadedFeatures, updatedAt: await writeBoundaryCache(source, loadedFeatures) || new Date().toISOString() };
+    mapSourceFeatures.set(source.id, loaded);
+    return loaded;
+  } finally {
+    clearTimeout(timeout);
+    requestController.signal.removeEventListener('abort', abortSource);
+  }
+}
+
+async function selectMapFeatureAtPoint(point, revision, requestController) {
+  const activeSource = currentSource();
+  const sources = activeSource && (activeSource.type !== 'profile-imports' || features.length)
+    ? [activeSource] : [];
+  sources.push(...config.sources.filter(source => source.type !== 'profile-imports' && source.id !== activeSource?.id));
+  let unavailableSources = 0;
+
+  for (let index = 0; index < sources.length; index += 1) {
+    if (!isCurrentMapFeatureSearch(revision, requestController)) return;
+    const source = sources[index];
+    showMapStatus(`Pruefe ${source.label} (${index + 1}/${sources.length}) ...`, 'loading');
+    let loaded;
+    try {
+      loaded = await loadMapSearchFeatures(source, requestController);
+    } catch {
+      if (!isCurrentMapFeatureSearch(revision, requestController)) return;
+      unavailableSources += 1;
+      continue;
+    }
+    if (!isCurrentMapFeatureSearch(revision, requestController) || !loaded) return;
+    const match = loaded.features.find(feature => pointInFeature(point, feature));
+    if (!match) continue;
+
+    const sourceChanged = currentSource()?.id !== source.id;
+    if (sourceChanged) {
+      saveSelection(null);
+      element('source').value = source.id;
+      boundaryLoadRevision += 1;
+      controller?.abort();
+      controller = null;
+      element('search-form').setAttribute('aria-busy', 'false');
+      clearSelection();
+      updateSource();
+    }
+    if (sourceChanged || features !== loaded.features) {
+      features = loaded.features;
+      boundaryUpdatedAt = loaded.updatedAt;
+      element('refresh-boundaries').disabled = false;
+      showBoundaries();
+    }
+    hideMapStatus();
+    const selectedFeature = features.find(feature => pointInFeature(point, feature));
+    if (selectedFeature) selectFeature(selectedFeature);
+    return;
+  }
+
+  if (!isCurrentMapFeatureSearch(revision, requestController)) return;
+  const failureNote = unavailableSources ? ` ${unavailableSources} Region(en) waren nicht erreichbar.` : '';
+  showMapStatus(`Kein Revier an dieser Stelle gefunden.${failureNote}`, unavailableSources ? 'error' : 'info');
 }
 
 function renderResults() {
@@ -1541,6 +1641,7 @@ async function fetchSelectedBoundaries(source, revision) {
     if (controller !== requestController || revision !== boundaryLoadRevision) return;
     features = loaded;
     boundaryUpdatedAt = await writeBoundaryCache(source, loaded) || new Date().toISOString();
+    mapSourceFeatures.set(source.id, { features: loaded, updatedAt: boundaryUpdatedAt });
     if (revision === boundaryLoadRevision) showBoundaries();
   } catch (error) {
     if (controller !== requestController || revision !== boundaryLoadRevision) return;
@@ -1587,6 +1688,7 @@ async function loadSelectedSource() {
   if (cached?.features.length) {
     features = cached.features;
     boundaryUpdatedAt = cached.updatedAt;
+    mapSourceFeatures.set(source.id, cached);
     showBoundaries();
     return;
   }
@@ -1900,9 +2002,19 @@ map.on('click', event => {
     element('marker-title').focus();
     return;
   }
-  if (element('search-panel-body').hidden || element('search-tab').getAttribute('aria-selected') !== 'true' || !features.length) return;
-  const feature = features.find(candidate => pointInFeature(event.latlng, candidate));
-  if (feature) selectFeature(feature);
+  if (element('search-tab').getAttribute('aria-selected') !== 'true') return;
+  cancelMapFeatureSearch();
+  const revision = ++mapFeatureSearchRevision;
+  const requestController = new AbortController();
+  mapFeatureSearchController = requestController;
+  const timeout = setTimeout(() => requestController.abort('timeout'), 45000);
+  void selectMapFeatureAtPoint(event.latlng, revision, requestController).finally(() => {
+    clearTimeout(timeout);
+    if (mapFeatureSearchController === requestController) {
+      mapFeatureSearchController = null;
+      if (requestController.signal.aborted) showMapStatus('Regionsuche abgebrochen. Bitte Region auswaehlen.', 'error');
+    }
+  });
 });
 element('marker-form').addEventListener('submit', async event => {
   event.preventDefault();

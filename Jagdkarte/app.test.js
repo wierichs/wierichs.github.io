@@ -2,7 +2,7 @@ export async function initializeAppFixture() {
   const parsed = new DOMParser().parseFromString(await (await fetch('./index.html')).text(), 'text/html');
   document.body.replaceChildren(...parsed.body.childNodes);
   for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) document.head.append(stylesheet);
-  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, pendingMode: null, holdMode: false,
+  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, profileQueries: 0, pendingMode: null, holdMode: false,
     denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
     boundaryRequests: [], createdProfiles: [], importedProfiles: [],
     currentPosition: { latitude: 49.5, longitude: 6.5 } };
@@ -48,6 +48,7 @@ export async function initializeAppFixture() {
       upsert() { write = true; return this; },
       delete() { write = true; return this; },
       then(resolve, reject) {
+        if (table === 'hunting_profiles' && !write) state.profileQueries += 1;
         let data = write ? [] : rowsFor(table).filter(row => filters.every(([key, value]) => row[key] === value) &&
           minimums.every(([key, value]) => row[key] >= value));
         if (range) data = data.slice(range[0], range[1] + 1);
@@ -126,6 +127,26 @@ export async function initializeAppFixture() {
   await import('./lucide.js');
   await import('./config.js');
   window.JAGDKARTE_CONFIG.mapTilerApiKey = 'mock-maptiler-key';
+  window.JAGDKARTE_CONFIG.sources.unshift({
+    id: 'map-click-test', label: 'Testregion', type: 'snapshot', url: './map-click-test.geojson',
+    nameFields: ['name'], idFields: ['id'], attribution: 'Test', license: 'Test', licenseUrl: '', metadataUrl: ''
+  });
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, options) => {
+    const requestUrl = new URL(typeof input === 'string' ? input : input.url, location.href);
+    if (requestUrl.pathname.endsWith('/map-click-test.geojson')) {
+      return Promise.resolve(new Response(JSON.stringify({ type: 'FeatureCollection', features: [{
+        type: 'Feature', id: 'map-click-district', properties: { id: 'map-click-district', name: 'Klicktest-Revier' },
+        geometry: { type: 'Polygon', coordinates: [[[7, 52], [9, 52], [9, 54], [7, 54], [7, 52]]] }
+      }] }), { headers: { 'Content-Type': 'application/geo+json' } }));
+    }
+    return nativeFetch(input, options);
+  };
+  const createMap = window.L.map;
+  window.L.map = (...parameters) => {
+    state.map = createMap(...parameters);
+    return state.map;
+  };
   const tileLayer = window.L.tileLayer;
   window.L.tileLayer = (_url, options) => tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jHh0AAAAASUVORK5CYII=', options);
   await import('./app.js');
@@ -203,6 +224,17 @@ export async function runAppTests() {
     change('profile-list', 'test-profile');
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    control('search-tab').click();
+    const profileQueriesBeforeMapClick = state.profileQueries;
+    state.map.fire('click', { latlng: frame.L.latLng(49.6, 6.6) });
+    await waitFor(() => state.profileQueries > profileQueriesBeforeMapClick);
+    assert(control('search-panel-body').hidden && control('search-tab').getAttribute('aria-selected') === 'true',
+      'A collapsed panel should not block map selection while the search tab is active.');
+    passed.push('Map click selection works with the collapsed panel and search tab active');
+    await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
+    change('profile-list', 'test-profile');
+    await waitFor(() => control('profile-list').value === 'test-profile');
+    await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     const placementMarker = frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon');
     const placementBounds = placementMarker.getBoundingClientRect();
     control('add-marker').click();
@@ -255,6 +287,7 @@ export async function runAppTests() {
     }
     passed.push('Selected district download includes persistent profile markers in a named JWD file');
     assert(!control('edit-boundary').hidden, 'An editor should be able to edit an imported boundary.');
+    const boundaryRequestsBeforeEdit = state.boundaryRequests.length;
     control('edit-boundary').click();
     await waitFor(() => frame.document.querySelector('.boundary-edit-midpoint'));
     frame.document.querySelector('.boundary-edit-midpoint').click();
@@ -284,7 +317,7 @@ export async function runAppTests() {
     assert(control('remove-boundary-part').disabled,
       'The final remaining polygon component should not be removable.');
     control('cancel-boundary').click();
-    assert(state.boundaryRequests.length === 1 && state.boundaryGeometry.coordinates.length === 2 &&
+    assert(state.boundaryRequests.length === boundaryRequestsBeforeEdit && state.boundaryGeometry.coordinates.length === 2 &&
       state.boundaryGeometry.coordinates[0].length === 2 &&
       control('edit-boundary').hidden === false, 'Cancel should discard unsaved boundary changes.');
     const importedSource = frame.JAGDKARTE_CONFIG.sources.find(source => source.id === 'user-imports');
@@ -447,6 +480,16 @@ export async function runAppTests() {
       state.createdProfiles[0].p_feature_id !== state.createdProfiles[1].p_feature_id,
     'Repeated MultiPolygon imports with different names should create separate profiles.');
     passed.push('Repeated MultiPolygon imports accept distinct district names and create separate profiles');
+
+    change('source', '');
+    await waitFor(() => control('selection').hidden && control('status').textContent.includes('Bitte zuerst'));
+    control('search-tab').click();
+    state.map.fire('click', { latlng: frame.L.latLng(53, 8) });
+    await waitFor(() => control('source').value === 'map-click-test' &&
+      control('selected-name').textContent === 'Klicktest-Revier');
+    assert(control('search-panel-body').hidden && control('app-layout').classList.contains('has-selection'),
+      'A map click without a selected region should load and select a matching public region.');
+    passed.push('Map click can find a district without a region selected');
     return passed;
   } finally {
     iframe.remove();

@@ -373,12 +373,13 @@ HTML as a file will not support ES modules or service workers. The running local
 preview is `http://localhost:8087/Jagdkarte/`. The app works on GitHub Pages and
 uses relative URLs, a scoped service worker, and 192/512px installation icons.
 
-The app shell and bundled libraries are cached offline. Selected region
-boundaries are stored in the browser Cache API: selecting a region shows its
-saved boundaries immediately, while **Reviergrenzen aktualisieren** explicitly
-fetches and replaces that region's cache. Only the selected source is fetched.
-Authentication, cache misses, explicit refreshes, and background maps require a
-connection. Standard OSM tiles may use the browser's HTTP cache according to
+The app shell and bundled libraries are cached offline. Region boundaries are
+stored in the browser Cache API: selecting a region shows its saved boundaries
+immediately, while **Reviergrenzen aktualisieren** explicitly fetches and
+replaces that region's cache. A map click checks the active region first, then
+searches other public sources sequentially and cache-first; private imports are
+never loaded as part of that cross-region search. Authentication, cache misses,
+explicit refreshes, and uncached map searches require a connection. Standard OSM tiles may use the browser's HTTP cache according to
 the server's caching headers, but the app does not prefetch or promise offline
 tiles, respecting the tile usage policy:
 https://operations.osmfoundation.org/policies/tiles/ . For offline basemaps,
