@@ -126,6 +126,10 @@ const boundaryEditParts = L.layerGroup().addTo(map);
 
 window.lucide?.createIcons();
 new ResizeObserver(() => map.invalidateSize()).observe(element('map'));
+const attributionControl = map.attributionControl.getContainer();
+new ResizeObserver(() => {
+  element('app-layout').style.setProperty('--map-attribution-height', `${attributionControl.getBoundingClientRect().height}px`);
+}).observe(attributionControl);
 element('toggle-map-legend').addEventListener('click', () => {
   const collapsed = !element('map-key').hidden;
   element('map-key').hidden = collapsed;

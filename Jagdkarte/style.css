@@ -146,6 +146,8 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #map-status { position: absolute; top: 70px; right: 16px; z-index: 500; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(360px, calc(100% - 32px)); background: white; padding: 8px 12px; font-size: 13px; box-shadow: 0 2px 8px #20342826; }
 #map-status-text { min-width: 0; overflow-wrap: anywhere; }
 #close-map-status { border: 0; background: transparent; }
+.leaflet-bottom.leaflet-right { max-width: 100%; }
+.leaflet-control-attribution { overflow-wrap: anywhere; }
 .leaflet-control-attribution .maptiler-attribution-logo { width: 64px; height: 13px; object-fit: contain; vertical-align: middle; }
 .leaflet-container { font-family: 'Map Sans', sans-serif; }
 dialog { border: 1px solid var(--line); border-radius: 8px; padding: 24px; width: min(420px, calc(100% - 32px)); color: var(--ink); }
@@ -174,7 +176,7 @@ dialog::backdrop { background: #152a2260; }
   main.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   main.has-selection .map-surface { grid-row: 1; grid-column: 1; }
   main.has-selection aside { inset: 12px; width: auto; max-height: calc(100% - 24px); padding: 18px; border: 1px solid var(--line); border-radius: 6px; }
-  main.has-selection.search-collapsed aside { inset: auto 12px 12px; width: auto; height: 72px; min-height: 72px; max-height: 72px; padding: 12px 16px; }
+  main.has-selection.search-collapsed aside { inset: auto 12px calc(12px + var(--map-attribution-height, 0px)); width: auto; height: 72px; min-height: 72px; max-height: 72px; padding: 12px 16px; }
   main.has-selection.search-collapsed .panel-heading { position: absolute; top: 12px; right: 12px; z-index: 1; width: 42px; height: 42px; }
   main.has-selection.search-collapsed #selection { display: block; margin: 0; padding: 0 50px 0 0; border: 0; }
   main.has-selection.search-collapsed #selection .selection-heading { min-height: 42px; }
@@ -184,7 +186,7 @@ dialog::backdrop { background: #152a2260; }
   main.has-selection.search-collapsed .legal,
   main.has-selection.search-collapsed #profile-section { display: none; }
   h1 { font-size: 23px; margin-bottom: 16px; } #results { max-height: 200px; }
-  .map-legend { bottom: 35px; } main.has-selection.search-collapsed .map-legend { bottom: 96px; left: 12px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
+  .map-legend { bottom: 35px; } main.has-selection.search-collapsed .map-legend { bottom: calc(96px + var(--map-attribution-height, 0px)); left: 12px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
 }
 @media (max-width: 700px) and (orientation: landscape) {
   main { grid-template-columns: minmax(220px, 34vw) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
@@ -195,6 +197,6 @@ dialog::backdrop { background: #152a2260; }
   main.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   main.has-selection .map-surface { grid-row: 1; grid-column: 1; }
   main.has-selection aside { inset: 12px; }
-  main.has-selection.search-collapsed aside { inset: auto 12px 12px; height: 68px; min-height: 68px; max-height: 68px; }
+  main.has-selection.search-collapsed aside { inset: auto 12px calc(12px + var(--map-attribution-height, 0px)); height: 68px; min-height: 68px; max-height: 68px; }
 }
 @media (prefers-reduced-motion: no-preference) { aside { animation: reveal .35s ease-out; } @keyframes reveal { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } } }

@@ -218,6 +218,32 @@ export async function runAppTests() {
       frame.getComputedStyle(control('search-panel')).position === 'absolute' &&
       Math.abs(control('map-surface').getBoundingClientRect().width - mapLayout.getBoundingClientRect().width) < 1,
     'The selected-revier panel should overlay the full-width map.');
+    const attribution = frame.document.querySelector('.leaflet-control-attribution');
+    const extraAttribution = 'Testquelle mit einer langen Quellenangabe und Lizenz fuer die angezeigten Reviergrenzen';
+    for (const [width, height] of [[320, 700], [390, 844], [640, 360]]) {
+      iframe.style.width = `${width}px`;
+      iframe.style.height = `${height}px`;
+      await waitFor(() => frame.innerWidth === width);
+      for (const satellite of [false, true]) {
+        if (satellite) satelliteButton.click();
+        state.map.attributionControl.addAttribution(extraAttribution);
+        await waitFor(() => Math.abs(parseFloat(mapLayout.style.getPropertyValue('--map-attribution-height')) -
+          attribution.getBoundingClientRect().height) < 1 &&
+          control('search-panel').getBoundingClientRect().bottom <= attribution.getBoundingClientRect().top - 11);
+        const attributionBounds = attribution.getBoundingClientRect();
+        assert(attributionBounds.left >= -1 && attributionBounds.right <= width + 1 &&
+          attributionBounds.height > 0 && attribution.querySelector('a[href*="openstreetmap.org"]'),
+        'Map attribution should remain visible and fit the narrow map below the collapsed panel.');
+        assert(frame.document.querySelector('.map-legend').getBoundingClientRect().bottom <= control('search-panel').getBoundingClientRect().top,
+          'The legend should remain above the collapsed panel.');
+        state.map.attributionControl.removeAttribution(extraAttribution);
+        if (satellite) satelliteButton.click();
+      }
+    }
+    iframe.style.width = '1200px';
+    iframe.style.height = '800px';
+    await waitFor(() => frame.innerWidth === 1200);
+    passed.push('Mobile attribution stays below the collapsed panel with multiline OSM and satellite credits');
     control('toggle-search-panel').click();
     assert(control('search-panel-body').hidden && !control('selection').hidden &&
       control('toggle-search-panel').getAttribute('aria-expanded') === 'true',
