@@ -24,6 +24,9 @@ a { color: var(--green); }
 .account { margin-left: auto; display: flex; gap: 14px; align-items: center; min-width: 0; }
 #user-label { font-size: 13px; max-width: 200px; min-width: 0; min-height: 36px; padding: 6px 0; border: 0; background: transparent; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start; }
 #user-label:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--green); text-decoration: underline; }
+#help-link { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex: 0 0 42px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--ink); }
+#help-link:hover { background: #edf3ef; border-color: #a4b9ac; }
+#help-link svg { width: 20px; height: 20px; }
 main { display: grid; grid-template-columns: 350px minmax(0, 1fr); height: calc(100dvh - 70px); }
 aside { display: flex; flex-direction: column; min-height: 0; padding: 24px; overflow-y: auto; border-right: 1px solid var(--line); background: linear-gradient(180deg, #fff 0%, #f7faf8 100%); }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0; }
@@ -49,6 +52,7 @@ main.has-selection { position: relative; grid-template-columns: minmax(0, 1fr); 
 main.has-selection aside { position: absolute; inset: 12px auto 12px 12px; z-index: 600; grid-row: auto; grid-column: auto; width: min(350px, calc(100% - 24px)); padding: 20px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 20px #20342830; }
 main.has-selection.search-collapsed aside { width: 70px; padding: 12px; overflow: hidden; }
 main.has-selection.search-collapsed .panel-heading { justify-content: center; }
+main.has-selection.search-collapsed .map-legend { left: 94px; }
 main.has-selection.search-collapsed #search-panel-body,
 main.has-selection.search-collapsed #selection,
 main.has-selection.search-collapsed .source-note { display: none; }
@@ -162,6 +166,7 @@ dialog::backdrop { background: #152a2260; }
   .brand { font-size: 21px; } #user-label { display: block; flex: 0 1 96px; max-width: 96px; font-size: 10px; padding: 0; } .network { display: none; } .account { margin-left: auto; gap: 6px; }
   #import-profile { width: 42px; flex: 0 0 42px; padding: 9px; } #import-profile span { display: none; }
   #account-button { width: 42px; flex: 0 0 42px; padding: 9px; font-size: 12px; } #account-button span { display: none; }
+  #help-link { width: 42px; flex: 0 0 42px; padding: 9px; }
   main { height: calc(100dvh - 60px); grid-template-columns: 1fr; grid-template-rows: minmax(260px, 52%) minmax(0, 1fr); }
   main.search-collapsed { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 68px; }
   #toggle-search-panel svg { transform: none; }
@@ -179,7 +184,7 @@ dialog::backdrop { background: #152a2260; }
   main.has-selection.search-collapsed .legal,
   main.has-selection.search-collapsed #profile-section { display: none; }
   h1 { font-size: 23px; margin-bottom: 16px; } #results { max-height: 200px; }
-  .map-legend { bottom: 35px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
+  .map-legend { bottom: 35px; } main.has-selection.search-collapsed .map-legend { bottom: 96px; left: 12px; } .map-key { font-size: 11px; } .map-toolbar { top: 12px; right: 12px; }
 }
 @media (max-width: 700px) and (orientation: landscape) {
   main { grid-template-columns: minmax(220px, 34vw) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }

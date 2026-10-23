@@ -178,6 +178,9 @@ export async function runAppTests() {
     const frame = iframe.contentWindow;
     const state = frame.jagdkarteTest;
     const control = id => frame.document.getElementById(id);
+    assert(control('help-link')?.getAttribute('href') === './hilfe.html' &&
+      control('help-link').getAttribute('aria-label') === 'Hilfe zur Jagdkarte',
+    'The help link should remain available from the app header.');
     const satelliteButton = control('toggle-satellite');
     assert(!satelliteButton.hidden && !frame.document.querySelector('.leaflet-control-layers'),
       'MapTiler should use only the direct satellite toolbar switch.');
