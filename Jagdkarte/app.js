@@ -1,5 +1,6 @@
 import { boundaries, loadBoundaries, featureName } from './data.js';
 import { createJwdExport } from './jwd-import.js';
+import { createOfflineBasemap } from './offline-map.js';
 
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
@@ -37,10 +38,23 @@ const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
+let satelliteTiles = null;
+let offlineBasemap = null;
+const offlineBasemapAttribution = '<a href="https://protomaps.com/" target="_blank" rel="noopener">Protomaps</a> / <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
+function syncBasemapVisibility() {
+  const satelliteEnabled = Boolean(satelliteTiles && map.hasLayer(satelliteTiles));
+  const offlineEnabled = !satelliteEnabled && Boolean(offlineBasemap?.isActive());
+  if (satelliteEnabled || offlineEnabled) {
+    if (map.hasLayer(tiles)) map.removeLayer(tiles);
+  } else if (!map.hasLayer(tiles)) tiles.addTo(map);
+  offlineBasemap?.setVisible(offlineEnabled);
+  if (offlineEnabled) map.attributionControl.addAttribution(offlineBasemapAttribution);
+  else map.attributionControl.removeAttribution(offlineBasemapAttribution);
+}
 const mapTilerApiKey = typeof config.mapTilerApiKey === 'string' ? config.mapTilerApiKey.trim() : '';
 const satelliteViewButton = element('toggle-satellite');
 if (mapTilerApiKey) {
-  const satelliteTiles = L.tileLayer(
+  satelliteTiles = L.tileLayer(
     `https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.jpg?key=${encodeURIComponent(mapTilerApiKey)}`,
     {
       tileSize: 512,
@@ -59,10 +73,10 @@ if (mapTilerApiKey) {
   satelliteViewButton.hidden = false;
   satelliteViewButton.addEventListener('click', () => {
     const satelliteEnabled = !map.hasLayer(satelliteTiles);
-    const nextLayer = satelliteEnabled ? satelliteTiles : tiles;
-    map.removeLayer(satelliteEnabled ? tiles : satelliteTiles);
-    nextLayer.addTo(map);
-    map.fire('baselayerchange', { layer: nextLayer, name: satelliteEnabled ? 'Satellit' : 'OpenStreetMap' });
+    if (satelliteEnabled) satelliteTiles.addTo(map);
+    else map.removeLayer(satelliteTiles);
+    map.fire('baselayerchange', { layer: satelliteEnabled ? satelliteTiles : tiles,
+      name: satelliteEnabled ? 'Satellit' : 'OpenStreetMap' });
   });
 }
 L.control.scale({ imperial: false }).addTo(map);
@@ -117,15 +131,22 @@ let sharedLocationIsInBoundary = null;
 let presenceInterval = null;
 let huntingModeInterval = null;
 let presenceRevision = 0;
+let dogLocationInterval = null;
+let dogDataRevision = 0;
+let dogLocationRequestRevision = 0;
 let profileActivationRevision = 0;
 let huntingModePending = false;
 const profileMarkers = L.layerGroup().addTo(map);
 const profileLocations = L.layerGroup().addTo(map);
+const dogMarkers = L.layerGroup().addTo(map);
 const boundaryEditHandles = L.layerGroup().addTo(map);
 const boundaryEditParts = L.layerGroup().addTo(map);
 
 window.lucide?.createIcons();
-new ResizeObserver(() => map.invalidateSize()).observe(element('map'));
+new ResizeObserver(() => {
+  map.invalidateSize();
+  offlineBasemap?.setVisible(offlineBasemap.isActive() && (!satelliteTiles || !map.hasLayer(satelliteTiles)));
+}).observe(element('map'));
 const attributionControl = map.attributionControl.getContainer();
 new ResizeObserver(() => {
   element('app-layout').style.setProperty('--map-attribution-height', `${attributionControl.getBoundingClientRect().height}px`);
@@ -175,9 +196,12 @@ map.on('baselayerchange', event => {
   satelliteViewButton.setAttribute('aria-pressed', String(satelliteEnabled));
   satelliteViewButton.setAttribute('aria-label', label);
   satelliteViewButton.title = label;
+  syncBasemapVisibility();
 });
+offlineBasemap = createOfflineBasemap(map, syncBasemapVisibility);
+syncBasemapVisibility();
 tiles.on('tileerror', () => {
-  if (!tileWarningShown) {
+  if (!tileWarningShown && !offlineBasemap?.isActive()) {
     showMapStatus('Hintergrundkarte nicht verfuegbar. Internetverbindung pruefen.', 'error');
     tileWarningShown = true;
   }
@@ -657,6 +681,8 @@ function updateProfileControls() {
   element('delete-profile').disabled = profileDeletePending;
   element('profile-list').disabled = profileDeletePending;
   element('hunting-mode-control').hidden = !canEdit;
+  element('hunting-dog-section').hidden = !user || !activeProfile;
+  element('dog-form').hidden = !canEdit;
   element('owner-location-notice').hidden = !canEdit;
   element('hunting-mode').checked = Boolean(activeProfile?.hunting_mode);
   const canShareLocation = Boolean(user && activeProfile && activeProfile.owner_id !== user.id && activeProfile.hunting_mode);
@@ -728,6 +754,260 @@ function clearProfileMarkers() {
   markerExpiryTimers = [];
   profileMarkers.clearLayers();
 }
+
+function clearProfileDogs() {
+  if (dogLocationInterval !== null) clearInterval(dogLocationInterval);
+  dogLocationInterval = null;
+  dogDataRevision += 1;
+  dogLocationRequestRevision += 1;
+  dogMarkers.clearLayers();
+  element('dog-list').replaceChildren();
+  element('dog-location-key').hidden = true;
+  element('dogs-status').textContent = user ? 'Hunde werden beim Revieraufruf geladen.' : 'Anmelden, um Hunde zu sehen.';
+}
+
+async function loadProfileDogLocations(profileId, revision = dogDataRevision) {
+  const requestRevision = ++dogLocationRequestRevision;
+  if (!profileId || !user || !activeProfile?.hunting_mode) {
+    dogMarkers.clearLayers();
+    element('dog-location-key').hidden = true;
+    return;
+  }
+  const { data, error } = await supabaseClient.from('hunting_dog_locations')
+    .select('dog_id,latitude,longitude,accuracy,recorded_at').eq('profile_id', profileId);
+  if (revision !== dogDataRevision || requestRevision !== dogLocationRequestRevision ||
+    activeProfile?.id !== profileId || !user) return;
+  if (error) {
+    dogMarkers.clearLayers();
+    element('dog-location-key').hidden = true;
+    element('dogs-status').textContent = `Hundepositionen nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
+    return;
+  }
+  dogMarkers.clearLayers();
+  const dogById = new Map(Array.from(element('dog-list').querySelectorAll('li[data-dog-id]'), item =>
+    [item.dataset.dogId, item.dataset.dogName]));
+  const locationByDogId = new Map((data || []).map(location => [location.dog_id, location]));
+  element('dog-list').querySelectorAll('li[data-dog-id]').forEach(item => {
+    const location = locationByDogId.get(item.dataset.dogId);
+    const locate = item.querySelector('[data-dog-action="locate"]');
+    locate.disabled = !location;
+    if (location) {
+      locate.dataset.latitude = String(location.latitude);
+      locate.dataset.longitude = String(location.longitude);
+    } else {
+      delete locate.dataset.latitude;
+      delete locate.dataset.longitude;
+    }
+  });
+  const now = Date.now();
+  (data || []).forEach(location => {
+    const dogName = dogById.get(location.dog_id);
+    if (!dogName) return;
+    const recordedAt = new Date(location.recorded_at);
+    const stale = !Number.isFinite(recordedAt.getTime()) || now - recordedAt.getTime() > 120000;
+    const marker = L.marker([location.latitude, location.longitude], {
+      icon: L.divIcon({
+        className: 'dog-location-marker',
+        html: `<span class="dog-location-swatch${stale ? ' dog-location-stale' : ''}"><i data-lucide="dog" aria-hidden="true"></i></span>`,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+        popupAnchor: [0, -19]
+      })
+    });
+    marker.dogId = location.dog_id;
+    marker.on('add', () => {
+      const markerElement = marker.getElement();
+      if (!markerElement) return;
+      markerElement.setAttribute('role', 'img');
+      markerElement.setAttribute('aria-label', `Hund ${dogName}`);
+      window.lucide?.createIcons({ root: markerElement });
+    });
+    const popup = document.createElement('div');
+    popup.className = 'profile-location-popup';
+    const label = document.createElement('strong');
+    label.textContent = dogName;
+    const time = document.createElement('span');
+    time.textContent = `Letzte Position: ${recordedAt.toLocaleString('de-DE')}${stale ? ' (veraltet)' : ''}`;
+    const accuracy = document.createElement('span');
+    accuracy.textContent = `GPS-Genauigkeit: ${Math.round(location.accuracy)} m`;
+    popup.append(label, time, accuracy);
+    marker.bindPopup(popup).addTo(dogMarkers);
+  });
+  element('dog-location-key').hidden = !data?.length;
+  const staleCount = (data || []).filter(location => now - new Date(location.recorded_at).getTime() > 120000).length;
+  const status = element('dogs-status');
+  const dogCount = element('dog-list').querySelectorAll('li[data-dog-id]').length;
+  status.textContent = `${dogCount} Hund${dogCount === 1 ? '' : 'e'} registriert; ${data?.length || 0} Position${data?.length === 1 ? '' : 'en'} verfuegbar.` +
+    (staleCount ? ` ${staleCount} Position${staleCount === 1 ? '' : 'en'} veraltet.` : '');
+}
+
+async function loadProfileDogs() {
+  const revision = ++dogDataRevision;
+  dogLocationRequestRevision += 1;
+  if (dogLocationInterval !== null) clearInterval(dogLocationInterval);
+  dogLocationInterval = null;
+  dogMarkers.clearLayers();
+  element('dog-list').replaceChildren();
+  element('dog-location-key').hidden = true;
+  if (!supabaseClient || !activeProfile || !user) {
+    element('dogs-status').textContent = 'Anmelden und ein Revierprofil auswaehlen, um Hunde zu sehen.';
+    return;
+  }
+  const profileId = activeProfile.id;
+  const userId = user.id;
+  const { data, error } = await supabaseClient.from('hunting_dogs')
+    .select('id,name,created_at').eq('profile_id', profileId).order('created_at');
+  if (revision !== dogDataRevision || activeProfile?.id !== profileId || user?.id !== userId) return;
+  if (error) {
+    element('dogs-status').textContent = `Hundeliste nicht verfuegbar. Datenbankschema aktualisieren. (${error.message})`;
+    return;
+  }
+  const list = element('dog-list');
+  (data || []).forEach(dog => {
+    const item = document.createElement('li');
+    item.dataset.dogId = dog.id;
+    item.dataset.dogName = dog.name;
+    const name = document.createElement('strong');
+    name.textContent = dog.name;
+    item.append(name);
+    const actions = document.createElement('div');
+    actions.className = 'dog-actions';
+    const locate = document.createElement('button');
+    locate.type = 'button';
+    locate.className = 'icon-button';
+    locate.dataset.dogAction = 'locate';
+    locate.dataset.dogId = dog.id;
+    locate.disabled = true;
+    locate.setAttribute('aria-label', `Position von ${dog.name} anzeigen`);
+    locate.title = `Position von ${dog.name} anzeigen`;
+    const locateIcon = document.createElement('i');
+    locateIcon.setAttribute('data-lucide', 'locate-fixed');
+    locateIcon.setAttribute('aria-hidden', 'true');
+    locate.append(locateIcon);
+    actions.append(locate);
+    if (canEditProfile(activeProfile)) {
+      const pair = document.createElement('button');
+      pair.type = 'button';
+      pair.dataset.dogAction = 'pair';
+      pair.dataset.dogId = dog.id;
+      pair.textContent = 'Smartphone koppeln';
+      pair.title = 'Erstellt einen neuen Schluessel und widerruft einen bisherigen';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.dataset.dogAction = 'delete';
+      remove.dataset.dogId = dog.id;
+      remove.setAttribute('aria-label', `${dog.name} loeschen`);
+      remove.title = `${dog.name} loeschen`;
+      const removeIcon = document.createElement('i');
+      removeIcon.setAttribute('data-lucide', 'trash-2');
+      removeIcon.setAttribute('aria-hidden', 'true');
+      remove.append(removeIcon);
+      actions.append(pair, remove);
+    }
+    item.append(actions);
+    list.append(item);
+  });
+  window.lucide?.createIcons({ root: list });
+  if (!activeProfile.hunting_mode) {
+    element('dogs-status').textContent = `${data?.length || 0} Hund${data?.length === 1 ? '' : 'e'} registriert. Positionen werden nur im aktiven Jagdmodus uebertragen.`;
+    return;
+  }
+  element('dogs-status').textContent = `${data?.length || 0} Hund${data?.length === 1 ? '' : 'e'} registriert. Lade letzte Positionen ...`;
+  await loadProfileDogLocations(profileId, revision);
+  if (revision === dogDataRevision && activeProfile?.id === profileId && activeProfile.hunting_mode && !document.hidden) {
+    dogLocationInterval = setInterval(() => {
+      if (!document.hidden) void loadProfileDogLocations(profileId, revision);
+    }, 15000);
+  }
+}
+
+element('dog-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!canEditProfile() || !element('dog-form').reportValidity()) return;
+  const profileId = activeProfile.id;
+  const name = element('dog-name').value.trim();
+  const button = element('dog-form').querySelector('button[type="submit"]');
+  button.disabled = true;
+  element('dogs-status').textContent = 'Hund wird registriert ...';
+  const { error } = await supabaseClient.rpc('create_hunting_dog', {
+    p_profile_id: profileId, p_name: name
+  });
+  button.disabled = false;
+  if (activeProfile?.id !== profileId) return;
+  if (error) {
+    element('dogs-status').textContent = `Hund konnte nicht registriert werden: ${error.message}`;
+    return;
+  }
+  element('dog-name').value = '';
+  await loadProfileDogs();
+});
+
+element('dog-list').addEventListener('click', async event => {
+  const button = event.target.closest('button[data-dog-action]');
+  if (!button || !canEditProfile() || !activeProfile || !supabaseClient) return;
+  const profileId = activeProfile.id;
+  const dogId = button.dataset.dogId;
+  const action = button.dataset.dogAction;
+  if (action === 'locate') {
+    const latitude = Number(button.dataset.latitude);
+    const longitude = Number(button.dataset.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
+    return;
+  }
+  if (action === 'delete') {
+    const dogName = button.closest('[data-dog-name]')?.dataset.dogName || 'diesen Hund';
+    if (!window.confirm(`"${dogName}" und seine letzte Position loeschen?`)) return;
+    button.disabled = true;
+    const { error } = await supabaseClient.rpc('delete_hunting_dog', { p_dog_id: dogId });
+    if (activeProfile?.id !== profileId) return;
+    if (error) {
+      button.disabled = false;
+      element('dogs-status').textContent = `Hund konnte nicht geloescht werden: ${error.message}`;
+      return;
+    }
+    await loadProfileDogs();
+    return;
+  }
+  if (action === 'pair') {
+    if (!window.confirm('Ein bisheriger Schluessel fuer dieses Smartphone wird sofort widerrufen. Fortfahren?')) return;
+    button.disabled = true;
+    const { data, error } = await supabaseClient.rpc('create_hunting_dog_device', { p_dog_id: dogId });
+    button.disabled = false;
+    if (activeProfile?.id !== profileId) return;
+    if (error) {
+      element('dogs-status').textContent = `Geraeteschluessel konnte nicht erstellt werden: ${error.message}`;
+      return;
+    }
+    const device = Array.isArray(data) ? data[0] : data;
+    if (!device?.device_token) {
+      element('dogs-status').textContent = 'Geraeteschluessel fehlt in der Serverantwort. Datenbankschema aktualisieren.';
+      return;
+    }
+    element('dog-device-name').textContent = `Hund: ${button.closest('[data-dog-name]')?.dataset.dogName || ''}`;
+    element('dog-device-token').value = device.device_token;
+    element('dog-device-status').hidden = true;
+    element('dog-device-dialog').showModal();
+  }
+});
+
+element('refresh-dogs').addEventListener('click', () => void loadProfileDogs());
+element('close-dog-device').addEventListener('click', () => element('dog-device-dialog').close());
+element('dog-device-dialog').addEventListener('close', () => {
+  element('dog-device-token').value = '';
+  element('dog-device-name').textContent = '';
+});
+element('copy-dog-device-token').addEventListener('click', async () => {
+  const status = element('dog-device-status');
+  try {
+    await navigator.clipboard.writeText(element('dog-device-token').value);
+    status.textContent = 'Geraeteschluessel kopiert.';
+  } catch {
+    element('dog-device-token').select();
+    status.textContent = 'Kopieren nicht verfuegbar. Schluessel markieren und manuell kopieren.';
+  }
+  status.hidden = false;
+});
 
 async function registerProfileBoundary(profile) {
   if (!canEditProfile(profile) || !selected) return;
@@ -966,6 +1246,16 @@ setInterval(() => {
 }, 30000);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && activeProfile && user) void loadProfileMarkers();
+  if (dogLocationInterval !== null) clearInterval(dogLocationInterval);
+  dogLocationInterval = null;
+  if (!document.hidden && activeProfile?.hunting_mode && user) {
+    const profileId = activeProfile.id;
+    const revision = dogDataRevision;
+    void loadProfileDogLocations(profileId, revision);
+    dogLocationInterval = setInterval(() => {
+      if (!document.hidden) void loadProfileDogLocations(profileId, revision);
+    }, 15000);
+  }
 });
 
 function pauseProfileLocation() {
@@ -1010,15 +1300,18 @@ function updateHuntingMode(profile, enabled) {
       .eq('profile_id', previousProfileId).eq('user_id', user.id);
     element('presence-status').hidden = false;
     element('presence-status').textContent = 'Jagdmodus aus. Standortfreigaben sind pausiert.';
+    void loadProfileDogs();
   } else if (profile.owner_id === user?.id) {
     element('presence-status').hidden = false;
     element('presence-status').textContent = 'Jagdmodus aktiv. Dein Standort und Teilnehmerstandorte werden geteilt.';
     startPresenceUpdates();
     void startProfileLocationSharing(profile);
+    void loadProfileDogs();
   } else {
     element('presence-status').hidden = false;
     element('presence-status').textContent = 'Jagdmodus aktiv. Du kannst deinen Standort mit diesem Revier teilen.';
     startPresenceUpdates();
+    void loadProfileDogs();
     if (readLocationConsent(profile) === true) void startProfileLocationSharing(profile);
   }
 }
@@ -1205,6 +1498,7 @@ async function activateProfile(profile) {
     profile.member_role = membership.role;
   }
   activeProfile = null;
+  clearProfileDogs();
   element('profile-list').value = '';
   element('presence-status').hidden = true;
   updateProfileControls();
@@ -1222,6 +1516,7 @@ async function activateProfile(profile) {
     if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
     await loadProfileMarkers();
     element('presence-status').hidden = false;
+    await loadProfileDogs();
     startHuntingModeUpdates(profile);
     if (profile.hunting_mode) {
       startPresenceUpdates();
@@ -1236,6 +1531,8 @@ async function activateProfile(profile) {
   await registerProfileBoundary(profile);
   if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
   await loadProfileMarkers();
+  if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
+  await loadProfileDogs();
   if (revision !== profileActivationRevision || activeProfile?.id !== profile.id) return;
   element('presence-status').hidden = false;
   startHuntingModeUpdates(profile);
@@ -1252,6 +1549,7 @@ async function loadProfiles(preferredId) {
   const revision = ++profileRevision;
   profiles = [];
   activeProfile = null;
+  clearProfileDogs();
   clearProfileMarkers();
   resetMarkerPlacement();
   updateProfileControls();
@@ -1331,6 +1629,7 @@ async function loadProfiles(preferredId) {
   if (activeProfile) await registerProfileBoundary(activeProfile);
   if (revision !== profileRevision) return;
   await loadProfileMarkers();
+  if (activeProfile?.owner_id === user.id) await loadProfileDogs();
   if (activeProfile?.owner_id === user.id) {
     element('presence-status').hidden = false;
     startHuntingModeUpdates(activeProfile);
@@ -1362,6 +1661,7 @@ function clearSelection() {
   activeProfile = null;
   profileRevision += 1;
   clearProfileMarkers();
+  clearProfileDogs();
   profileLocations.clearLayers();
   element('location-key').hidden = true;
   resetMarkerPlacement();
@@ -1385,7 +1685,9 @@ function selectFeature(feature, button, preferredProfileId) {
   setSelectedPanelView('details');
   const source = currentSource();
   const featureId = selectedFeatureId();
-  saveSelection(featureId && source.type !== 'profile-imports' ? { sourceId: source.id, featureId } : null);
+  const publicSelection = featureId && source.type !== 'profile-imports' ? { sourceId: source.id, featureId } : null;
+  saveSelection(publicSelection);
+  if (publicSelection) void writeBoundarySelectionCache(source, feature, featureId);
   boundary = L.geoJSON(feature, { smoothFactor: 0, style: { color: '#c43b55', weight: 3, fillColor: '#c43b55', fillOpacity: .14 } });
   if (element('show-boundary').checked) boundary.addTo(map);
   map.fitBounds(boundary.getBounds(), { padding: [24, 24], maxZoom: 16 });
@@ -1599,6 +1901,10 @@ function boundaryCacheRequest(source) {
   return new Request(new URL(`./__boundary-cache__/${encodeURIComponent(source.id)}.json`, location.href));
 }
 
+function boundarySelectionCacheRequest(source) {
+  return new Request(new URL(`./__boundary-cache__/${encodeURIComponent(source.id)}-selection.json`, location.href));
+}
+
 async function loadImportedBoundaries(source) {
   if (!user || !supabaseClient) throw new Error('Anmeldung erforderlich, um private Importe zu laden.');
   const { data, error } = await supabaseClient.from('hunting_profiles')
@@ -1624,6 +1930,31 @@ async function readBoundaryCache(source) {
     const collection = await response.json();
     return { features: boundaries(collection), updatedAt: response.headers.get('x-jagdkarte-cached-at') };
   } catch { return null; }
+}
+
+async function readBoundarySelectionCache(source) {
+  if (!('caches' in window) || source.type === 'profile-imports' || savedSelection?.sourceId !== source.id) return null;
+  try {
+    const cache = await caches.open(boundaryCacheName);
+    const response = await cache.match(boundarySelectionCacheRequest(source));
+    if (!response) return null;
+    const saved = await response.json();
+    if (saved.featureId !== savedSelection.featureId) return null;
+    const [feature] = boundaries({ type: 'FeatureCollection', features: [saved.feature] });
+    return feature && featureIdentifier(feature, source) === savedSelection.featureId
+      ? { feature, updatedAt: response.headers.get('x-jagdkarte-cached-at') } : null;
+  } catch { return null; }
+}
+
+async function writeBoundarySelectionCache(source, feature, featureId) {
+  if (!('caches' in window) || source.type === 'profile-imports') return;
+  try {
+    const response = new Response(JSON.stringify({ featureId, feature }), {
+      headers: { 'Content-Type': 'application/geo+json', 'X-Jagdkarte-Cached-At': new Date().toISOString() }
+    });
+    const cache = await caches.open(boundaryCacheName);
+    await cache.put(boundarySelectionCacheRequest(source), response);
+  } catch {}
 }
 
 async function writeBoundaryCache(source, loadedFeatures) {
@@ -1714,6 +2045,16 @@ async function loadSelectedSource() {
     boundaryUpdatedAt = cached.updatedAt;
     mapSourceFeatures.set(source.id, cached);
     showBoundaries();
+    return;
+  }
+  const cachedSelection = await readBoundarySelectionCache(source);
+  if (revision !== boundaryLoadRevision || currentSource()?.id !== source.id) return;
+  if (cachedSelection) {
+    features = [cachedSelection.feature];
+    boundaryUpdatedAt = cachedSelection.updatedAt;
+    mapSourceFeatures.set(source.id, { features, updatedAt: boundaryUpdatedAt });
+    showBoundaries();
+    void fetchSelectedBoundaries(source, revision);
     return;
   }
   await fetchSelectedBoundaries(source, revision);
@@ -2190,6 +2531,7 @@ async function applySession(session) {
     }
     profiles = [];
     activeProfile = null;
+    clearProfileDogs();
     profileRevision += 1;
     clearProfileMarkers();
     resetMarkerPlacement();

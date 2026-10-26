@@ -101,6 +101,13 @@ owners and Bearbeiter can delete any marker. Owners and Bearbeiter can also move
 any marker to their current browser-reported position, provided it is inside the
 profile boundary. The app uses a dedicated RPC for this operation; clients do
 not receive general marker UPDATE privileges.
+
+Owners and Bearbeiter can register dogs in a profile and issue a one-time
+smartphone device key. All profile members see the last position while Jagdmodus
+is active, including positions outside the revier boundary. Turning Jagdmodus
+off removes the last positions. The phone integration contract and deployment
+steps are in [hundestandort-api.md](./hundestandort-api.md). Rerun `schema.sql`
+and deploy the `dog-location` Supabase Edge Function after updating the app.
 Each signed-in user can click their email address in the header to set an
 optional **Anzeigename** for shared-revier participants. Only members of a
 shared profile can retrieve participant names and emails; blank names fall back
@@ -376,15 +383,38 @@ uses relative URLs, a scoped service worker, and 192/512px installation icons.
 The app shell and bundled libraries are cached offline. Region boundaries are
 stored in the browser Cache API: selecting a region shows its saved boundaries
 immediately, while **Reviergrenzen aktualisieren** explicitly fetches and
-replaces that region's cache. A map click checks the active region first, then
-searches other public sources sequentially and cache-first; private imports are
-never loaded as part of that cross-region search. Authentication, cache misses,
-explicit refreshes, and uncached map searches require a connection. Standard OSM tiles may use the browser's HTTP cache according to
-the server's caching headers, but the app does not prefetch or promise offline
-tiles, respecting the tile usage policy:
+replaces that region's cache. The last selected public boundary is also stored
+separately, so it is shown immediately if the full region cache is missing; the
+app then tries to refresh the region in the background. A map click checks the
+active region first, then searches other public sources sequentially and
+cache-first; private imports are never loaded as part of that cross-region
+search. Loading uncached region data, explicit refreshes, and uncached map
+searches require a connection. The map toolbar's **Offline-Karte** control
+imports a regional `.pmtiles` vector-basemap package and keeps it in this
+browser's IndexedDB; the package is never uploaded. It is restored and used
+offline on later launches. Offline rendering requires a Protomaps basemap
+archive with `earth`, `roads`, and `water` vector layers. MapLibre renders the
+base layer beneath the existing Leaflet boundaries, markers, and controls.
+Standard OSM tiles and MapTiler satellite imagery remain online-only. The app
+does not prefetch OSM tiles, respecting the tile usage policy:
 https://operations.osmfoundation.org/policies/tiles/ . For offline basemaps,
-use a provider that explicitly permits them or self-hosted tiles. Offline
-authentication is not simulated. Loaded polygons remain cached across reloads.
+only use a provider that explicitly permits them or a package you prepared
+yourself. Offline authentication is not simulated. Loaded polygons remain
+cached across reloads.
+
+To prepare a regional package, install the standalone [PMTiles CLI](https://docs.protomaps.com/pmtiles/cli)
+and extract a bounding box from a clustered Protomaps daily archive. The output
+can then be imported using the map toolbar:
+
+```powershell
+pmtiles extract https://build.protomaps.com/YYYYMMDD.pmtiles Jagdkarte-Region.pmtiles --bbox=MIN_LON,MIN_LAT,MAX_LON,MAX_LAT --maxzoom=15
+```
+
+Replace the date with an available daily build and the bounds with the desired
+region in longitude/latitude order. Smaller bounds and lower maximum zooms make
+smaller downloads. PMTiles archives must contain Protomaps basemap layers. OSM
+data is available under ODbL; retain the visible attribution and follow the
+license terms when redistributing a generated package.
 
 An optional MapTiler Satellite basemap can be enabled by setting
 `mapTilerApiKey` in `config.js`. The key is used in the browser, so restrict it
@@ -407,9 +437,10 @@ online responses replace the cached files; offline or failed requests use the
 last cached version. Newly introduced marker SVG paths are cached on demand as
 well. Reopening or updating the app reloads the catalog into the type selector.
 
-Dependencies are bundled: Supabase JS 2.49.8, Lucide 0.468.0, and Leaflet 1.9.3
-under `vendor/leaflet/`. Its license and runtime images are included locally, so
-the app does not depend on files from another project directory.
+Dependencies are bundled: Supabase JS 2.49.8, Lucide 0.468.0, Leaflet 1.9.3,
+MapLibre GL JS 5.6.2, PMTiles 4.5.0, and Protomaps basemaps 5.7.2. Their license
+texts, required Noto Sans glyph ranges, and style sprites are included locally,
+so offline map rendering does not fetch renderer assets from a CDN.
 
 The separate map location button still requests a one-time local position and
 does not store it. Shared-profile tracking requires the consent flow above and

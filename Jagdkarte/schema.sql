@@ -1,5 +1,6 @@
 create extension if not exists postgis with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.hunting_profiles (
   id uuid primary key default gen_random_uuid(),
@@ -62,6 +63,38 @@ create table if not exists public.hunting_user_profiles (
   display_name text check (display_name is null or length(trim(display_name)) between 1 and 60),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists public.hunting_dogs (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.hunting_profiles(id) on delete cascade,
+  name text not null check (length(trim(name)) between 1 and 60),
+  created_by uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.hunting_dog_devices (
+  id uuid primary key default gen_random_uuid(),
+  dog_id uuid not null references public.hunting_dogs(id) on delete cascade,
+  token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz,
+  revoked_at timestamptz
+);
+
+create unique index if not exists hunting_dog_devices_one_active_idx
+  on public.hunting_dog_devices(dog_id) where revoked_at is null;
+
+create table if not exists public.hunting_dog_locations (
+  dog_id uuid primary key references public.hunting_dogs(id) on delete cascade,
+  profile_id uuid not null references public.hunting_profiles(id) on delete cascade,
+  latitude double precision not null check (latitude between -90 and 90),
+  longitude double precision not null check (longitude between -180 and 180),
+  accuracy double precision not null check (accuracy between 0 and 5000),
+  recorded_at timestamptz not null,
+  received_at timestamptz not null default now()
+);
+
+create index if not exists hunting_dogs_profile_id_idx on public.hunting_dogs(profile_id);
 
 alter table public.hunting_markers
   add column if not exists type_id text not null default 'sonstiges'
@@ -179,6 +212,28 @@ begin
 end;
 $$;
 
+create or replace function public.require_active_hunting_mode_for_dog_location()
+returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare dog_profile_id uuid; enabled boolean;
+begin
+  select dog.profile_id, profile.hunting_mode into dog_profile_id, enabled
+  from public.hunting_dogs dog
+  join public.hunting_profiles profile on profile.id = dog.profile_id
+  where dog.id = new.dog_id for share of profile;
+  if dog_profile_id is null or dog_profile_id <> new.profile_id or not coalesce(enabled, false) then
+    raise exception 'Hundestandorte sind nur im aktiven Jagdmodus moeglich';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists hunting_dog_location_mode_guard on public.hunting_dog_locations;
+create trigger hunting_dog_location_mode_guard before insert or update on public.hunting_dog_locations
+  for each row execute function public.require_active_hunting_mode_for_dog_location();
+
 drop trigger if exists hunting_mode_location_guard on public.hunting_profile_locations;
 create trigger hunting_mode_location_guard before insert or update on public.hunting_profile_locations
   for each row execute function public.require_hunting_mode_for_location();
@@ -195,8 +250,112 @@ begin
   update public.hunting_profiles set hunting_mode = p_enabled where id = p_profile_id;
   if not p_enabled then
     delete from public.hunting_profile_locations where profile_id = p_profile_id;
+    delete from public.hunting_dog_locations where profile_id = p_profile_id;
   end if;
   return p_enabled;
+end;
+$$;
+
+create or replace function public.create_hunting_dog(p_profile_id uuid, p_name text)
+returns public.hunting_dogs
+language plpgsql security definer
+set search_path = ''
+as $$
+declare created_dog public.hunting_dogs;
+begin
+  if auth.uid() is null or not public.can_edit_hunting_profile(p_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann Hunde registrieren';
+  end if;
+  if p_name is null or length(trim(p_name)) not between 1 and 60 then
+    raise exception 'Der Hundename muss 1 bis 60 Zeichen lang sein';
+  end if;
+  insert into public.hunting_dogs (profile_id, name, created_by)
+  values (p_profile_id, trim(p_name), auth.uid())
+  returning * into created_dog;
+  return created_dog;
+end;
+$$;
+
+create or replace function public.delete_hunting_dog(p_dog_id uuid)
+returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare deleted_count integer;
+begin
+  if auth.uid() is null or not exists (
+    select 1 from public.hunting_dogs dog
+    where dog.id = p_dog_id and public.can_edit_hunting_profile(dog.profile_id)
+  ) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann diesen Hund loeschen';
+  end if;
+  delete from public.hunting_dogs where id = p_dog_id;
+  get diagnostics deleted_count = row_count;
+  return deleted_count = 1;
+end;
+$$;
+
+create or replace function public.create_hunting_dog_device(p_dog_id uuid)
+returns table(device_id uuid, device_token text)
+language plpgsql security definer
+set search_path = ''
+as $$
+declare new_device_id uuid := gen_random_uuid(); new_device_token text;
+begin
+  if auth.uid() is null or not exists (
+    select 1 from public.hunting_dogs dog
+    where dog.id = p_dog_id and public.can_edit_hunting_profile(dog.profile_id)
+  ) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann ein Hundegeraet koppeln';
+  end if;
+  new_device_token := encode(extensions.gen_random_bytes(32), 'hex');
+  update public.hunting_dog_devices set revoked_at = now()
+    where dog_id = p_dog_id and revoked_at is null;
+  insert into public.hunting_dog_devices (id, dog_id, token_hash)
+  values (new_device_id, p_dog_id,
+    encode(extensions.digest(convert_to(new_device_token, 'UTF8'), 'sha256'), 'hex'));
+  return query select new_device_id, new_device_token;
+end;
+$$;
+
+create or replace function public.record_hunting_dog_location(
+  p_device_id uuid, p_latitude double precision, p_longitude double precision,
+  p_accuracy double precision, p_recorded_at timestamptz
+)
+returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare target_dog_id uuid; target_profile_id uuid; enabled boolean; changed_count integer;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Nur der Positionsdienst darf Hundestandorte speichern';
+  end if;
+  if p_latitude is null or p_latitude not between -90 and 90
+    or p_longitude is null or p_longitude not between -180 and 180
+    or p_accuracy is null or p_accuracy not between 0 and 5000
+    or p_recorded_at is null or p_recorded_at > now() + interval '5 minutes' then
+    raise exception 'Ungueltige Positionsdaten';
+  end if;
+  select dog.id, dog.profile_id, profile.hunting_mode into target_dog_id, target_profile_id, enabled
+  from public.hunting_dog_devices device
+  join public.hunting_dogs dog on dog.id = device.dog_id
+  join public.hunting_profiles profile on profile.id = dog.profile_id
+  where device.id = p_device_id and device.revoked_at is null
+  for share of device, profile;
+  if target_dog_id is null then raise exception 'Hundegeraet nicht verfuegbar'; end if;
+  if not coalesce(enabled, false) then raise exception 'Jagdmodus ist nicht aktiv'; end if;
+
+  insert into public.hunting_dog_locations
+    (dog_id, profile_id, latitude, longitude, accuracy, recorded_at, received_at)
+  values (target_dog_id, target_profile_id, p_latitude, p_longitude, p_accuracy, p_recorded_at, now())
+  on conflict (dog_id) do update set
+    profile_id = excluded.profile_id, latitude = excluded.latitude, longitude = excluded.longitude,
+    accuracy = excluded.accuracy, recorded_at = excluded.recorded_at, received_at = now()
+  where excluded.recorded_at > public.hunting_dog_locations.recorded_at;
+  get diagnostics changed_count = row_count;
+  update public.hunting_dog_devices set last_seen_at = now() where id = p_device_id;
+  return changed_count = 1;
 end;
 $$;
 
@@ -462,6 +621,9 @@ alter table public.hunting_profile_invitations enable row level security;
 alter table public.hunting_markers enable row level security;
 alter table public.hunting_profile_locations enable row level security;
 alter table public.hunting_user_profiles enable row level security;
+alter table public.hunting_dogs enable row level security;
+alter table public.hunting_dog_devices enable row level security;
+alter table public.hunting_dog_locations enable row level security;
 
 drop policy if exists "Users can view their own display name" on public.hunting_user_profiles;
 create policy "Users can view their own display name" on public.hunting_user_profiles
@@ -473,6 +635,14 @@ drop policy if exists "Users can update their own display name" on public.huntin
 create policy "Users can update their own display name" on public.hunting_user_profiles
   for update to authenticated using (user_id = (select auth.uid()))
   with check (user_id = (select auth.uid()));
+
+drop policy if exists "Profile members can view hunting dogs" on public.hunting_dogs;
+create policy "Profile members can view hunting dogs" on public.hunting_dogs
+  for select to authenticated using (public.can_view_hunting_profile(profile_id));
+drop policy if exists "Profile members can view active dog locations" on public.hunting_dog_locations;
+create policy "Profile members can view active dog locations" on public.hunting_dog_locations
+  for select to authenticated using (public.can_view_hunting_profile(profile_id)
+    and public.hunting_mode_is_enabled(profile_id));
 
 drop policy if exists "Profiles visible to owner and invited members" on public.hunting_profiles;
 create policy "Profiles visible to owner and invited members" on public.hunting_profiles
@@ -523,12 +693,16 @@ create policy "Users can remove their own profile location" on public.hunting_pr
 
 revoke all on public.hunting_profiles, public.hunting_profile_members,
   public.hunting_profile_invitations, public.hunting_markers,
-  public.hunting_profile_locations, public.hunting_user_profiles from public, anon, authenticated;
+  public.hunting_profile_locations, public.hunting_user_profiles,
+  public.hunting_dogs, public.hunting_dog_devices, public.hunting_dog_locations
+  from public, anon, authenticated;
 grant select, delete on public.hunting_profiles to authenticated;
 grant select on public.hunting_profile_members to authenticated;
 grant select, insert, delete on public.hunting_markers to authenticated;
 grant select, insert, update, delete on public.hunting_profile_locations to authenticated;
 grant select, insert, update on public.hunting_user_profiles to authenticated;
+grant select on public.hunting_dogs, public.hunting_dog_locations to authenticated;
+grant select on public.hunting_dog_devices to service_role;
 revoke all on function public.can_view_hunting_profile(uuid) from public, anon;
 revoke all on function public.owns_hunting_profile(uuid) from public, anon;
 revoke all on function public.can_edit_hunting_profile(uuid) from public, anon;
@@ -536,7 +710,13 @@ revoke all on function public.get_hunting_profile_participants(uuid) from public
 revoke all on function public.get_hunting_profile_owner_emails(uuid[]) from public, anon;
 revoke all on function public.hunting_mode_is_enabled(uuid) from public, anon;
 revoke all on function public.require_hunting_mode_for_location() from public, anon, authenticated;
+revoke all on function public.require_active_hunting_mode_for_dog_location() from public, anon, authenticated;
 revoke all on function public.set_hunting_mode(uuid, boolean) from public, anon, authenticated;
+revoke all on function public.create_hunting_dog(uuid, text) from public, anon;
+revoke all on function public.delete_hunting_dog(uuid) from public, anon;
+revoke all on function public.create_hunting_dog_device(uuid) from public, anon;
+revoke all on function public.record_hunting_dog_location(uuid, double precision, double precision,
+  double precision, timestamptz) from public, anon, authenticated;
 revoke all on function public.create_hunting_profile(text, text, text) from public, anon;
 revoke all on function public.invite_hunting_profile_member(uuid, text, text) from public, anon;
 revoke all on function public.accept_hunting_profile_invitations() from public, anon;
@@ -547,6 +727,11 @@ grant execute on function public.get_hunting_profile_participants(uuid) to authe
 grant execute on function public.get_hunting_profile_owner_emails(uuid[]) to authenticated;
 grant execute on function public.hunting_mode_is_enabled(uuid) to authenticated;
 grant execute on function public.set_hunting_mode(uuid, boolean) to authenticated;
+grant execute on function public.create_hunting_dog(uuid, text) to authenticated;
+grant execute on function public.delete_hunting_dog(uuid) to authenticated;
+grant execute on function public.create_hunting_dog_device(uuid) to authenticated;
+grant execute on function public.record_hunting_dog_location(uuid, double precision, double precision,
+  double precision, timestamptz) to service_role;
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;
 grant execute on function public.invite_hunting_profile_member(uuid, text, text) to authenticated;
 grant execute on function public.accept_hunting_profile_invitations() to authenticated;

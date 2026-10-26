@@ -10,12 +10,16 @@
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="./vendor/maplibre/maplibre-gl.css">
   <link rel="stylesheet" href="./style.css">
   <script defer src="./vendor/leaflet/leaflet.js"></script>
+  <script defer src="./vendor/maplibre/maplibre-gl.js"></script>
+  <script defer src="./vendor/pmtiles/pmtiles.js"></script>
+  <script defer src="./vendor/protomaps/basemaps.js"></script>
   <script defer src="./lucide.js"></script>
   <script defer src="./supabase.js"></script>
   <script defer src="./config.js"></script>
-  <script type="module" src="./app.js?v=77"></script>
+  <script type="module" src="./app.js?v=83"></script>
 </head>
 <body>
   <header class="topbar">
@@ -70,6 +74,16 @@
           <p id="share-location-note" hidden>Wenn der Jagdmodus aktiv ist, sehen die Reviermitglieder deinen Standort innerhalb der Reviergrenze. Die Position wird alle 30 Sekunden aktualisiert. Du kannst die Freigabe hier jederzeit beenden.</p>
           <p id="share-location-status" role="status" aria-live="polite" hidden></p>
           <p id="presence-status" role="status" aria-live="polite" hidden></p>
+          <section id="hunting-dog-section" aria-label="Hunde im Revier" hidden>
+            <div class="result-heading dog-heading"><h2>Hunde im Revier</h2><button id="refresh-dogs" type="button" class="icon-button" title="Hundepositionen aktualisieren" aria-label="Hundepositionen aktualisieren"><i data-lucide="refresh-cw" aria-hidden="true"></i></button></div>
+            <p id="dogs-status" role="status" aria-live="polite">Hunde werden geladen ...</p>
+            <ul id="dog-list" aria-label="Registrierte Hunde"></ul>
+            <form id="dog-form" hidden>
+              <label for="dog-name">Hundename</label>
+              <input id="dog-name" maxlength="60" autocomplete="off" required placeholder="z. B. Brutus">
+              <button class="primary" type="submit">Hund registrieren</button>
+            </form>
+          </section>
           <div class="profile-actions">
             <button id="invite-toggle" type="button" hidden>Benutzer einladen</button>
             <button id="edit-boundary" type="button" hidden><i data-lucide="edit-3" aria-hidden="true"></i><span>Grenze bearbeiten</span></button>
@@ -102,12 +116,23 @@
       <footer class="source-note"><span>Verfuegbare Abdeckung: konfigurierte Regionen</span><a id="source-link" target="_blank" rel="noopener noreferrer">Datenquelle</a><a id="license-link" target="_blank" rel="noopener noreferrer"></a></footer>
     </aside>
     <section id="map-surface" class="map-surface" aria-label="Karte">
+      <div id="offline-basemap" hidden aria-hidden="true"></div>
       <div id="map" aria-label="OpenStreetMap-Karte"></div>
-      <div class="map-toolbar"><button id="locate" class="icon-button" title="Mein Standort" aria-label="Mein Standort"><i data-lucide="locate-fixed" aria-hidden="true"></i></button><button id="fit" class="icon-button" title="Revier einpassen" aria-label="Revier einpassen" disabled><i data-lucide="scan" aria-hidden="true"></i></button><button id="add-marker" class="icon-button" type="button" title="Markierung setzen" aria-label="Markierung setzen" aria-pressed="false" hidden><i data-lucide="map-pin-plus" aria-hidden="true"></i></button><button id="toggle-satellite" class="icon-button" type="button" title="Satellitenansicht anzeigen" aria-label="Satellitenansicht anzeigen" aria-pressed="false" hidden><i data-lucide="layers-2" aria-hidden="true"></i></button><button id="fullscreen-map" class="icon-button" type="button" title="Karte im Vollbild anzeigen" aria-label="Karte im Vollbild anzeigen" aria-pressed="false"><i id="fullscreen-enter-icon" data-lucide="expand" aria-hidden="true"></i><i id="fullscreen-exit-icon" data-lucide="minimize-2" aria-hidden="true" hidden></i></button><button id="update-app" class="icon-button" type="button" title="Neue Version verfuegbar. App aktualisieren" aria-label="App aktualisieren" hidden><i data-lucide="refresh-cw" aria-hidden="true"></i></button><button id="install" class="icon-button" title="App installieren" aria-label="App installieren" hidden><i data-lucide="monitor-down" aria-hidden="true"></i></button></div>
-      <div class="map-legend"><button id="toggle-map-legend" class="icon-button" type="button" title="Legende anzeigen" aria-label="Legende anzeigen" aria-expanded="false" aria-controls="map-key"><i data-lucide="list" aria-hidden="true"></i></button><div id="map-key" class="map-key" hidden><span class="boundary-swatch"></span> Jagdbezirksgrenze <span id="location-key" hidden><span class="location-legend-item"><span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span> Mitglied</span><span class="location-legend-item"><span class="person-location-swatch person-location-editor"><i data-lucide="shield-check" aria-hidden="true"></i></span> Bearbeiter</span><span class="location-legend-item"><span class="person-location-swatch person-location-owner"><i data-lucide="crown" aria-hidden="true"></i></span> Chef</span></span></div></div>
+      <div class="map-toolbar"><button id="locate" class="icon-button" title="Mein Standort" aria-label="Mein Standort"><i data-lucide="locate-fixed" aria-hidden="true"></i></button><button id="fit" class="icon-button" title="Revier einpassen" aria-label="Revier einpassen" disabled><i data-lucide="scan" aria-hidden="true"></i></button><button id="add-marker" class="icon-button" type="button" title="Markierung setzen" aria-label="Markierung setzen" aria-pressed="false" hidden><i data-lucide="map-pin-plus" aria-hidden="true"></i></button><button id="offline-map-button" class="icon-button" type="button" title="Offline-Karte verwalten" aria-label="Offline-Karte verwalten"><i data-lucide="map" aria-hidden="true"></i></button><button id="toggle-satellite" class="icon-button" type="button" title="Satellitenansicht anzeigen" aria-label="Satellitenansicht anzeigen" aria-pressed="false" hidden><i data-lucide="layers-2" aria-hidden="true"></i></button><button id="fullscreen-map" class="icon-button" type="button" title="Karte im Vollbild anzeigen" aria-label="Karte im Vollbild anzeigen" aria-pressed="false"><i id="fullscreen-enter-icon" data-lucide="expand" aria-hidden="true"></i><i id="fullscreen-exit-icon" data-lucide="minimize-2" aria-hidden="true" hidden></i></button><button id="update-app" class="icon-button" type="button" title="Neue Version verfuegbar. App aktualisieren" aria-label="App aktualisieren" hidden><i data-lucide="refresh-cw" aria-hidden="true"></i></button><button id="install" class="icon-button" title="App installieren" aria-label="App installieren" hidden><i data-lucide="monitor-down" aria-hidden="true"></i></button></div>
+      <div class="map-legend"><button id="toggle-map-legend" class="icon-button" type="button" title="Legende anzeigen" aria-label="Legende anzeigen" aria-expanded="false" aria-controls="map-key"><i data-lucide="list" aria-hidden="true"></i></button><div id="map-key" class="map-key" hidden><span class="boundary-swatch"></span> Jagdbezirksgrenze <span id="location-key" hidden><span class="location-legend-item"><span class="person-location-swatch"><i data-lucide="user-round" aria-hidden="true"></i></span> Mitglied</span><span class="location-legend-item"><span class="person-location-swatch person-location-editor"><i data-lucide="shield-check" aria-hidden="true"></i></span> Bearbeiter</span><span class="location-legend-item"><span class="person-location-swatch person-location-owner"><i data-lucide="crown" aria-hidden="true"></i></span> Chef</span></span><span id="dog-location-key" hidden><span class="dog-location-swatch"><i data-lucide="dog" aria-hidden="true"></i></span> Hund</span></div></div>
       <div id="map-status" hidden><span id="map-status-text" role="status" aria-live="polite"></span><button id="close-map-status" class="icon-button" type="button" title="Meldung schliessen" aria-label="Meldung schliessen" hidden><i data-lucide="x" aria-hidden="true"></i></button></div>
     </section>
   </main>
+  <dialog id="offline-map-dialog" aria-labelledby="offline-map-title">
+    <div class="dialog-heading"><h2 id="offline-map-title">Offline-Karte</h2><button id="close-offline-map" class="icon-button" type="button" title="Schliessen" aria-label="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <p id="offline-map-current" role="status">Keine Offline-Karte installiert.</p>
+    <button id="choose-offline-map" class="primary" type="button"><i data-lucide="upload" aria-hidden="true"></i><span>Kartenpaket importieren</span></button>
+    <input id="offline-map-file" type="file" accept=".pmtiles,application/octet-stream" hidden>
+    <label class="toggle offline-map-toggle"><input id="offline-map-enabled" type="checkbox" disabled><span>Offline-Karte verwenden</span></label>
+    <button id="remove-offline-map" type="button" title="Offline-Karte entfernen" aria-label="Offline-Karte entfernen" disabled><i data-lucide="trash-2" aria-hidden="true"></i><span>Karte entfernen</span></button>
+    <p id="offline-map-status" role="status" aria-live="polite"></p>
+    <p class="offline-map-local-note">Das Kartenpaket bleibt auf diesem Gerät.</p>
+  </dialog>
   <dialog id="login-dialog" aria-labelledby="login-title">
     <div class="dialog-heading"><h2 id="login-title">Anmelden</h2><button id="close-login" class="icon-button" aria-label="Schliessen" title="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
     <fieldset id="auth-modes" class="auth-modes"><legend>Kontozugang</legend><label><input type="radio" name="auth-mode" value="login" checked><span>Anmelden</span></label><label><input type="radio" name="auth-mode" value="register"><span>Registrieren</span></label></fieldset>
@@ -129,6 +154,15 @@
       <option value="large">Groß</option>
     </select>
     <p id="marker-icon-size-status" role="status" aria-live="polite" hidden></p>
+  </dialog>
+  <dialog id="dog-device-dialog" aria-labelledby="dog-device-title">
+    <div class="dialog-heading"><h2 id="dog-device-title">Smartphone koppeln</h2><button id="close-dog-device" class="icon-button" type="button" title="Schliessen" aria-label="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <p id="dog-device-name"></p>
+    <label for="dog-device-token">Einmalig angezeigter Geräteschlüssel</label>
+    <textarea id="dog-device-token" rows="3" readonly spellcheck="false"></textarea>
+    <button id="copy-dog-device-token" type="button"><i data-lucide="copy" aria-hidden="true"></i><span>Schlüssel kopieren</span></button>
+    <p id="dog-device-note">Den Schlüssel in der Smartphone-App hinterlegen. Er wird hier nicht gespeichert. Ein neuer Schlüssel widerruft den bisherigen sofort.</p>
+    <p id="dog-device-status" role="status" aria-live="polite" hidden></p>
   </dialog>
   <dialog id="boundary-import-dialog" aria-labelledby="boundary-import-title">
     <form method="dialog">

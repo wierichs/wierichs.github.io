@@ -11,13 +11,14 @@
   <script type="module">
     import { runDataTests } from './data.test.js';
     import { initializeAppFixture, runAppTests } from './app.test.js';
+    import { runOfflineMapTests } from './offline-map.test.js';
 
     if (new URLSearchParams(location.search).has('app-fixture')) {
       await initializeAppFixture();
     } else {
       const output = document.querySelector('#results');
       try {
-        const passed = [...await runDataTests(), ...await runAppTests()];
+        const passed = [...await runDataTests(), ...await runAppTests(), ...await runOfflineMapTests()];
         output.textContent = passed.map(test => `PASS ${test}`).join('\n');
         document.body.dataset.testResult = 'passed';
       } catch (error) {

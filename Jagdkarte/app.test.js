@@ -1,11 +1,75 @@
+import { loadOfflineMap, removeOfflineMap, saveOfflineMap } from './offline-map-storage.js';
+
 export async function initializeAppFixture() {
-  const parsed = new DOMParser().parseFromString(await (await fetch('./index.html')).text(), 'text/html');
+  const parsed = new DOMParser().parseFromString(await (await fetch(`./index.html?fixture=${Date.now()}`, { cache: 'no-store' })).text(), 'text/html');
   document.body.replaceChildren(...parsed.body.childNodes);
-  for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) document.head.append(stylesheet);
+  for (const stylesheet of parsed.querySelectorAll('link[rel="stylesheet"]')) {
+    stylesheet.href = `${stylesheet.href}?fixture=${Date.now()}`;
+    document.head.append(stylesheet);
+  }
   const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, profileQueries: 0, pendingMode: null, holdMode: false,
     denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
-    boundaryRequests: [], createdProfiles: [], importedProfiles: [],
+    boundaryRequests: [], createdProfiles: [], importedProfiles: [], networkRequests: 0,
+    dogs: [], dogLocations: [], createdDogs: [], issuedDogDevices: [], tileLayers: [],
     currentPosition: { latitude: 49.5, longitude: 6.5 } };
+  const boundaryCache = window.parent.__jagdkarteTestBoundaryCache || new Map();
+  state.boundaryCache = boundaryCache;
+  state.offlineRestore = new URLSearchParams(location.search).has('offline-restore');
+  Object.defineProperty(window, 'caches', { configurable: true, value: {
+    async open() {
+      return {
+        async match(request) { return boundaryCache.get(request.url)?.clone(); },
+        async put(request, response) { boundaryCache.set(request.url, response.clone()); }
+      };
+    }
+  } });
+  class TestFileSource {
+    constructor(file) { this.file = file; }
+    getKey() { return this.file.name; }
+  }
+  class TestPmtilesArchive {
+    constructor(source) { this.source = source; }
+    async getHeader() { return { tileType: 1, minLon: 6.2, minLat: 49.8, maxLon: 6.8, maxLat: 50.2 }; }
+    async getMetadata() { return { vector_layers: [{ id: 'earth' }, { id: 'roads' }, { id: 'water' }] }; }
+  }
+  class TestPmtilesProtocol {
+    constructor() { this.tiles = new Map(); }
+    add(archive) { this.tiles.set(archive.source.getKey(), archive); }
+    tile() {}
+  }
+  class TestMapLibre {
+    constructor(options) {
+      this.options = options;
+      this.listeners = new Map();
+      this.view = null;
+      state.maplibreMaps.push(this);
+      queueMicrotask(() => this.emit('load'));
+    }
+    on(name, listener) { this.listeners.set(name, [...(this.listeners.get(name) || []), listener]); return this; }
+    once(name, listener) {
+      const onceListener = event => {
+        this.off(name, onceListener);
+        listener(event);
+      };
+      return this.on(name, onceListener);
+    }
+    off(name, listener) { this.listeners.set(name, (this.listeners.get(name) || []).filter(candidate => candidate !== listener)); }
+    emit(name, event = {}) { (this.listeners.get(name) || []).forEach(listener => listener(event)); }
+    jumpTo(view) { this.view = view; }
+    resize() {}
+    remove() { this.removed = true; }
+  }
+  window.pmtiles = { PMTiles: TestPmtilesArchive, FileSource: TestFileSource,
+    Protocol: TestPmtilesProtocol, TileType: { Mvt: 1 } };
+  window.maplibregl = { Map: TestMapLibre, addProtocol() {} };
+  window.basemaps = {
+    namedFlavor() { return {}; },
+    layers(source) { return [
+      { id: 'background', type: 'background' },
+      ...['earth', 'roads', 'water'].map(layer => ({ id: layer, type: 'fill', source, 'source-layer': layer }))
+    ]; }
+  };
+  state.maplibreMaps = [];
   state.boundaryGeometry = { type: 'MultiPolygon', coordinates: [
     [[[6, 49], [7, 49], [7, 50], [6, 50], [6, 49]], [[6.2, 49.2], [6.3, 49.2], [6.3, 49.3], [6.2, 49.3], [6.2, 49.2]]],
     [[[8, 49], [9, 49], [9, 50], [8, 50], [8, 49]]]
@@ -23,6 +87,8 @@ export async function initializeAppFixture() {
     if (!state.user) return [];
     if (table === 'hunting_profiles') return [profile(), ...state.importedProfiles];
     if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: state.memberRole }];
+    if (table === 'hunting_dogs') return state.dogs;
+    if (table === 'hunting_dog_locations') return state.dogLocations;
     if (table === 'hunting_markers') return [{ id: 'test-marker', profile_id: 'test-profile', type_id: state.markerType,
       title: 'Testmarker', notes: '', latitude: 49.6, longitude: 6.6, created_by: 'owner',
       created_at: '2026-01-01T00:00:00Z', expires_at: null }];
@@ -76,6 +142,22 @@ export async function initializeAppFixture() {
         state.createdProfiles.push(parameters);
         state.importedProfiles.push(createdProfile);
         return Promise.resolve({ data: createdProfile, error: null });
+      }
+      if (name === 'create_hunting_dog') {
+        const dog = { id: `test-dog-${state.createdDogs.length + 1}`, profile_id: parameters.p_profile_id,
+          name: parameters.p_name, created_at: '2026-10-26T12:00:00Z' };
+        state.createdDogs.push(dog);
+        state.dogs.push(dog);
+        return Promise.resolve({ data: dog, error: null });
+      }
+      if (name === 'delete_hunting_dog') {
+        state.dogs = state.dogs.filter(dog => dog.id !== parameters.p_dog_id);
+        state.dogLocations = state.dogLocations.filter(location => location.dog_id !== parameters.p_dog_id);
+        return Promise.resolve({ data: true, error: null });
+      }
+      if (name === 'create_hunting_dog_device') {
+        state.issuedDogDevices.push(parameters.p_dog_id);
+        return Promise.resolve({ data: [{ device_id: 'test-device', device_token: 'a'.repeat(64) }], error: null });
       }
       if (name === 'change_hunting_marker_type') {
         state.typeChangeRequests.push(parameters);
@@ -135,6 +217,8 @@ export async function initializeAppFixture() {
   window.fetch = (input, options) => {
     const requestUrl = new URL(typeof input === 'string' ? input : input.url, location.href);
     if (requestUrl.pathname.endsWith('/map-click-test.geojson')) {
+      state.networkRequests += 1;
+      if (state.offlineRestore) return Promise.reject(new TypeError('Failed to fetch'));
       return Promise.resolve(new Response(JSON.stringify({ type: 'FeatureCollection', features: [{
         type: 'Feature', id: 'map-click-district', properties: { id: 'map-click-district', name: 'Klicktest-Revier' },
         geometry: { type: 'Polygon', coordinates: [[[7, 52], [9, 52], [9, 54], [7, 54], [7, 52]]] }
@@ -145,31 +229,51 @@ export async function initializeAppFixture() {
   const createMap = window.L.map;
   window.L.map = (...parameters) => {
     state.map = createMap(...parameters);
+    state.fitBoundsCalls = [];
+    const fitBounds = state.map.fitBounds.bind(state.map);
+    state.map.fitBounds = (...fitParameters) => {
+      state.fitBoundsCalls.push(fitParameters[0]);
+      return fitBounds(...fitParameters);
+    };
     return state.map;
   };
   const tileLayer = window.L.tileLayer;
-  window.L.tileLayer = (_url, options) => tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jHh0AAAAASUVORK5CYII=', options);
+  window.L.tileLayer = (_url, options) => {
+    const layer = tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jHh0AAAAASUVORK5CYII=', options);
+    state.tileLayers.push(layer);
+    if (!state.baseTile) state.baseTile = layer;
+    return layer;
+  };
   await import('./app.js');
   state.ready = true;
 }
 
 export async function runAppTests() {
+  const selectionStorageKey = 'jagdkarte-last-selection-v1';
   const profileStorageKey = 'jagdkarte-last-profile-v1';
   const locationConsentStorageKey = 'jagdkarte-location-consent-v1';
+  const previousSelection = localStorage.getItem(selectionStorageKey);
   const previousProfileChoice = localStorage.getItem(profileStorageKey);
   const previousLocationConsents = localStorage.getItem(locationConsentStorageKey);
+  const offlinePreferenceKey = 'jagdkarte-offline-map-enabled-v1';
+  const previousOfflinePreference = localStorage.getItem(offlinePreferenceKey);
+  const previousOfflineMap = await loadOfflineMap();
+  await removeOfflineMap();
+  localStorage.removeItem(offlinePreferenceKey);
+  localStorage.removeItem(selectionStorageKey);
   localStorage.removeItem(profileStorageKey);
   localStorage.removeItem(locationConsentStorageKey);
+  window.__jagdkarteTestBoundaryCache = new Map();
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;left:-10000px;width:1200px;height:800px;border:0';
   iframe.src = './tests.html?app-fixture';
   document.body.append(iframe);
   const passed = [];
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
-  const waitFor = async condition => {
+  const waitFor = async (condition, message = 'App test timed out.') => {
     const deadline = Date.now() + 10000;
     while (!condition()) {
-      if (Date.now() >= deadline) throw new Error('App test timed out.');
+      if (Date.now() >= deadline) throw new Error(message);
       await new Promise(resolve => requestAnimationFrame(resolve));
     }
   };
@@ -258,8 +362,35 @@ export async function runAppTests() {
     control('toggle-search-panel').click();
     await waitFor(() => control('profile-list').querySelector('option[value="test-profile"]'));
     state.mode = true;
+    state.dogs = [{ id: 'dog-outside', profile_id: 'test-profile', name: 'Faehrte', created_at: '2026-10-26T12:00:00Z' }];
+    state.dogLocations = [{ dog_id: 'dog-outside', profile_id: 'test-profile', latitude: 50.5,
+      longitude: 7.5, accuracy: 8, recorded_at: new Date().toISOString() }];
     change('profile-list', 'test-profile');
     await waitFor(() => control('profile-list').value === 'test-profile' && !control('share-location-control').hidden);
+    await waitFor(() => control('dog-list').querySelector('[data-dog-id="dog-outside"]'));
+    await waitFor(() => frame.document.querySelector('#map .dog-location-marker'),
+      `Dog marker missing (mode=${state.mode}; profile=${control('profile-list').value}; status=${control('dogs-status').textContent}).`);
+    assert(control('dog-list').textContent.includes('Faehrte') && !control('dog-location-key').hidden,
+      'Registered dogs and dog locations should be visible to profile members while hunting mode is active.');
+    const dogMarker = frame.document.querySelector('#map .dog-location-marker');
+    assert(dogMarker.querySelector('svg'), 'The dog map marker should render its Lucide icon.');
+    dogMarker.click();
+    await waitFor(() => frame.document.querySelector('.leaflet-popup-content')?.textContent.includes('Letzte Position'));
+    assert(frame.document.querySelector('.leaflet-popup-content').textContent.includes('Faehrte'),
+      'A dog location outside the selected polygon should still have a visible map popup.');
+    const locateDog = control('dog-list').querySelector('[data-dog-action="locate"]');
+    assert(!locateDog.disabled && locateDog.getAttribute('aria-label') === 'Position von Faehrte anzeigen',
+      'Members should have an accessible map-navigation action for the latest dog position.');
+    control('dog-name').value = 'Lotte';
+    control('dog-form').dispatchEvent(new frame.Event('submit', { bubbles: true, cancelable: true }));
+    await waitFor(() => state.createdDogs.length === 1 && control('dog-list').textContent.includes('Lotte'));
+    control('dog-list').querySelector('[data-dog-id="dog-outside"] [data-dog-action="pair"]').click();
+    await waitFor(() => control('dog-device-dialog').open);
+    assert(control('dog-device-token').value === 'a'.repeat(64) && state.issuedDogDevices[0] === 'dog-outside',
+      'Pairing should display the one-time device token returned by the authorized RPC.');
+    control('close-dog-device').click();
+    await waitFor(() => control('dog-device-token').value === '');
+    passed.push('Dogs can be registered, paired, and displayed outside the selected district');
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     control('search-tab').click();
     const profileQueriesBeforeMapClick = state.profileQueries;
@@ -527,9 +658,77 @@ export async function runAppTests() {
     assert(control('search-panel-body').hidden && control('app-layout').classList.contains('has-selection'),
       'A map click without a selected region should load and select a matching public region.');
     passed.push('Map click can find a district without a region selected');
+
+    const selectionCacheUrl = new URL('./__boundary-cache__/map-click-test-selection.json', frame.location.href).href;
+    const regionCacheUrl = new URL('./__boundary-cache__/map-click-test.json', frame.location.href).href;
+    await waitFor(() => state.boundaryCache.has(selectionCacheUrl));
+    state.boundaryCache.delete(regionCacheUrl);
+    const offlineFrame = document.createElement('iframe');
+    offlineFrame.style.cssText = 'position:fixed;left:-10000px;width:1200px;height:800px;border:0';
+    offlineFrame.src = './tests.html?app-fixture&offline-restore';
+    document.body.append(offlineFrame);
+    await waitFor(() => offlineFrame.contentWindow?.jagdkarteTest?.ready);
+    const offlineControl = id => offlineFrame.contentDocument.getElementById(id);
+    await waitFor(() => offlineControl('selected-name').textContent === 'Klicktest-Revier');
+    assert(offlineControl('app-layout').classList.contains('has-selection') &&
+      offlineFrame.contentDocument.querySelectorAll('.leaflet-overlay-pane path').length > 0 &&
+      offlineFrame.contentWindow.jagdkarteTest.networkRequests > 0,
+    'The last selected public boundary should render from its local copy when the region cache and network are unavailable.');
+    offlineFrame.remove();
+    passed.push('Last selected public boundary restores offline when the region cache is missing');
+
+    control('offline-map-button').click();
+    assert(control('offline-map-dialog').open, 'Offline-map manager did not open.');
+    const offlinePackage = new frame.File(['mock vector PMTiles archive'], 'test-region.pmtiles', {
+      type: 'application/octet-stream'
+    });
+    const offlineFileInput = control('offline-map-file');
+    Object.defineProperty(offlineFileInput, 'files', { configurable: true, value: [offlinePackage] });
+    offlineFileInput.dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => state.maplibreMaps.length === 1 && state.maplibreMaps[0].view);
+    assert(!control('offline-basemap').hidden && !state.map.hasLayer(state.baseTile) &&
+      control('offline-map-enabled').checked && control('offline-map-current').textContent.includes('test-region.pmtiles'),
+    'Importing a PMTiles package should persist and activate the offline basemap.');
+    state.map.setView([50, 8], 10);
+    await waitFor(() => state.maplibreMaps[0].view?.center?.[0] === 8 &&
+      state.maplibreMaps[0].view?.center?.[1] === 50 && state.maplibreMaps[0].view.zoom === 9);
+    satelliteButton.click();
+    assert(control('offline-basemap').hidden && state.map.hasLayer(state.tileLayers[1]),
+      'Satellite switching should temporarily hide the offline basemap.');
+    satelliteButton.click();
+    assert(!control('offline-basemap').hidden && !state.map.hasLayer(state.baseTile),
+      'Returning from satellite imagery should restore the selected offline basemap.');
+    control('offline-map-enabled').checked = false;
+    control('offline-map-enabled').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    assert(control('offline-basemap').hidden && state.map.hasLayer(state.baseTile),
+      'Disabling the offline basemap should restore standard OpenStreetMap tiles.');
+    state.fitBoundsCalls.length = 0;
+    control('offline-map-enabled').checked = true;
+    control('offline-map-enabled').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => !control('offline-basemap').hidden);
+    assert(state.fitBoundsCalls.length === 1,
+      `Offline package bounds were not fitted on activation (${state.fitBoundsCalls.length} calls).`);
+    const restoredBounds = state.fitBoundsCalls[0];
+    assert(Math.abs(restoredBounds[0][0] - 49.8) < .001 &&
+      Math.abs(restoredBounds[0][1] - 6.2) < .001 &&
+      Math.abs(restoredBounds[1][0] - 50.2) < .001 &&
+      Math.abs(restoredBounds[1][1] - 6.8) < .001,
+    'Offline basemap should fit to the stored archive bounds when reactivated.');
+    control('remove-offline-map').click();
+    await waitFor(() => control('offline-map-current').textContent === 'Keine Offline-Karte installiert.');
+    assert(!control('offline-map-enabled').checked && control('offline-basemap').hidden &&
+      state.map.hasLayer(state.baseTile), 'Removing the offline package should fall back to OpenStreetMap.');
+    passed.push('Offline PMTiles import, persistence, camera sync and basemap switching work');
     return passed;
   } finally {
     iframe.remove();
+    delete window.__jagdkarteTestBoundaryCache;
+    await removeOfflineMap();
+    if (previousOfflineMap) await saveOfflineMap(previousOfflineMap.file);
+    if (previousOfflinePreference === null) localStorage.removeItem(offlinePreferenceKey);
+    else localStorage.setItem(offlinePreferenceKey, previousOfflinePreference);
+    if (previousSelection === null) localStorage.removeItem(selectionStorageKey);
+    else localStorage.setItem(selectionStorageKey, previousSelection);
     if (previousProfileChoice === null) localStorage.removeItem(profileStorageKey);
     else localStorage.setItem(profileStorageKey, previousProfileChoice);
     if (previousLocationConsents === null) localStorage.removeItem(locationConsentStorageKey);

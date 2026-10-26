@@ -1,5 +1,6 @@
-const CACHE = 'jagdkarte-shell-v102';
-const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './config.js',
+const CACHE = 'jagdkarte-shell-v109';
+const SHELL = ['./', './index.html', './style.css', './app.js?v=83', './offline-map.js', './offline-map-storage.js',
+  './data.js', './config.js',
   './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
   './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/leiter.svg',
   './markers/kanzel.svg', './markers/wagen.svg', './markers/drueckjagdbock.svg', './markers/erdsitz.svg', './markers/salzlecke.svg',
@@ -10,6 +11,15 @@ const SHELL = ['./', './index.html', './style.css', './app.js', './data.js', './
   './vendor/leaflet/images/layers.png', './vendor/leaflet/images/layers-2x.png',
   './vendor/leaflet/images/marker-icon.png', './vendor/leaflet/images/marker-icon-2x.png',
   './vendor/leaflet/images/marker-shadow.png', './vendor/leaflet/LICENSE'];
+SHELL.push('./vendor/maplibre/maplibre-gl.js', './vendor/maplibre/maplibre-gl.css',
+  './vendor/maplibre/LICENSE.txt', './vendor/pmtiles/pmtiles.js', './vendor/pmtiles/LICENSE',
+  './vendor/protomaps/basemaps.js', './vendor/protomaps/LICENSE.md', './vendor/protomaps/fonts/OFL.txt',
+  './vendor/protomaps/fonts/Noto Sans Regular/0-255.pbf', './vendor/protomaps/fonts/Noto Sans Medium/0-255.pbf',
+  './vendor/protomaps/fonts/Noto Sans Italic/0-255.pbf',
+  './vendor/protomaps/fonts/Noto Sans Regular/256-511.pbf', './vendor/protomaps/fonts/Noto Sans Medium/256-511.pbf',
+  './vendor/protomaps/fonts/Noto Sans Italic/256-511.pbf', './vendor/protomaps/sprites/light.json',
+  './vendor/protomaps/sprites/light.png', './vendor/protomaps/sprites/light@2x.json',
+  './vendor/protomaps/sprites/light@2x.png', './vendor/protomaps/sprites-LICENSE.md');
 const OPTIONAL_SHELL = ['./jwd-import.js'];
 const shellUrls = new Set([...SHELL, ...OPTIONAL_SHELL].map(path => new URL(path, self.location).href));
 const markerCatalogUrl = new URL('./marker-types.json', self.location);
