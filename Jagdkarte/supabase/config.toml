@@ -1,0 +1,4 @@
+project_id = "jagdkarte"
+
+[functions.dog-location]
+verify_jwt = false
