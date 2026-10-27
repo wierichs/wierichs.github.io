@@ -986,6 +986,34 @@ element('dog-list').addEventListener('click', async event => {
     }
     element('dog-device-name').textContent = `Hund: ${button.closest('[data-dog-name]')?.dataset.dogName || ''}`;
     element('dog-device-token').value = device.device_token;
+    const qrCanvas = element('dog-device-qr');
+    const qrCode = window.qrcodegen?.QrCode;
+    if (qrCode) {
+      const qr = qrCode.encodeText(device.device_token, qrCode.Ecc.MEDIUM);
+      const quietZone = 4;
+      const scale = 8;
+      const canvasSize = (qr.size + quietZone * 2) * scale;
+      qrCanvas.width = canvasSize;
+      qrCanvas.height = canvasSize;
+      const context = qrCanvas.getContext('2d');
+      if (context) {
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvasSize, canvasSize);
+        context.fillStyle = '#18221d';
+        for (let y = 0; y < qr.size; y += 1) {
+          for (let x = 0; x < qr.size; x += 1) {
+            if (qr.getModule(x, y)) {
+              context.fillRect((x + quietZone) * scale, (y + quietZone) * scale, scale, scale);
+            }
+          }
+        }
+        element('dog-device-qr-wrap').hidden = false;
+      } else {
+        element('dog-device-qr-wrap').hidden = true;
+      }
+    } else {
+      element('dog-device-qr-wrap').hidden = true;
+    }
     element('dog-device-status').hidden = true;
     element('dog-device-dialog').showModal();
   }
@@ -996,6 +1024,9 @@ element('close-dog-device').addEventListener('click', () => element('dog-device-
 element('dog-device-dialog').addEventListener('close', () => {
   element('dog-device-token').value = '';
   element('dog-device-name').textContent = '';
+  element('dog-device-qr-wrap').hidden = true;
+  element('dog-device-qr').width = 0;
+  element('dog-device-qr').height = 0;
 });
 element('copy-dog-device-token').addEventListener('click', async () => {
   const status = element('dog-device-status');

@@ -104,6 +104,9 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #dog-device-dialog { width: min(440px, calc(100vw - 28px)); }
 #dog-device-dialog textarea { width: 100%; min-height: 82px; margin: 4px 0 8px; padding: 10px; resize: vertical; border: 1px solid #bdcac2; border-radius: 5px; background: #f5f7f5; color: var(--ink); font: 12px/1.5 ui-monospace, monospace; overflow-wrap: anywhere; }
 #dog-device-dialog > p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+#dog-device-qr-wrap { display: grid; justify-items: center; gap: 6px; margin: 10px 0 14px; }
+#dog-device-qr { display: block; width: min(230px, calc(100vw - 112px)); height: auto; aspect-ratio: 1; background: #fff; image-rendering: pixelated; }
+#dog-device-qr-wrap p { max-width: 290px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; text-align: center; }
 #dog-device-dialog > button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; }
 #dog-device-status { margin-bottom: 0; }
 .profile-section #share-location-note { margin: 4px 0 8px; }

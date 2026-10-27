@@ -220,6 +220,13 @@ export async function initializeAppFixture() {
   window.jagdkarteTest = state;
   await import('./vendor/leaflet/leaflet.js');
   await import('./lucide.js');
+  await new Promise((resolve, reject) => {
+    const qrScript = document.createElement('script');
+    qrScript.src = './vendor/qrcodegen-v1.8.0-es6.js';
+    qrScript.onload = resolve;
+    qrScript.onerror = reject;
+    document.head.append(qrScript);
+  });
   await import('./config.js');
   window.JAGDKARTE_CONFIG.mapTilerApiKey = 'mock-maptiler-key';
   window.JAGDKARTE_CONFIG.sources.unshift({
@@ -402,8 +409,11 @@ export async function runAppTests() {
     await waitFor(() => control('dog-device-dialog').open);
     assert(control('dog-device-token').value === 'a'.repeat(64) && state.issuedDogDevices[0] === 'dog-outside',
       'Pairing should display the one-time device token returned by the authorized RPC.');
+    assert(!control('dog-device-qr-wrap').hidden && control('dog-device-qr').width > 0 &&
+      control('dog-device-qr').height === control('dog-device-qr').width,
+    'Pairing should render a square QR code for the one-time device token.');
     control('close-dog-device').click();
-    await waitFor(() => control('dog-device-token').value === '');
+    await waitFor(() => control('dog-device-token').value === '' && control('dog-device-qr').width === 0);
     passed.push('Dogs can be registered, paired, and displayed outside the selected district');
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     control('search-tab').click();

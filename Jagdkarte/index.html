@@ -17,9 +17,10 @@
   <script defer src="./vendor/pmtiles/pmtiles.js"></script>
   <script defer src="./vendor/protomaps/basemaps.js"></script>
   <script defer src="./lucide.js"></script>
+  <script defer src="./vendor/qrcodegen-v1.8.0-es6.js"></script>
   <script defer src="./supabase.js"></script>
   <script defer src="./config.js"></script>
-  <script type="module" src="./app.js?v=85"></script>
+  <script type="module" src="./app.js?v=86"></script>
 </head>
 <body>
   <header class="topbar">
@@ -170,6 +171,10 @@
   <dialog id="dog-device-dialog" aria-labelledby="dog-device-title">
     <div class="dialog-heading"><h2 id="dog-device-title">Smartphone koppeln</h2><button id="close-dog-device" class="icon-button" type="button" title="Schliessen" aria-label="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
     <p id="dog-device-name"></p>
+    <div id="dog-device-qr-wrap" class="dog-device-qr-wrap" hidden>
+      <canvas id="dog-device-qr" role="img" aria-label="QR-Code für den Geräteschlüssel"></canvas>
+      <p>Mit dem Hunde-Smartphone scannen oder den Schlüssel manuell eingeben.</p>
+    </div>
     <label for="dog-device-token">Einmalig angezeigter Geräteschlüssel</label>
     <textarea id="dog-device-token" rows="3" readonly spellcheck="false"></textarea>
     <button id="copy-dog-device-token" type="button"><i data-lucide="copy" aria-hidden="true"></i><span>Schlüssel kopieren</span></button>

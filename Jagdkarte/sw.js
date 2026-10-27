@@ -1,7 +1,7 @@
-const CACHE = 'jagdkarte-shell-v114';
-const SHELL = ['./', './index.html', './style.css', './app.js?v=85', './offline-map.js', './offline-map-storage.js',
+const CACHE = 'jagdkarte-shell-v115';
+const SHELL = ['./', './index.html', './style.css', './app.js?v=86', './offline-map.js', './offline-map-storage.js',
   './data.js', './config.js', './hilfe.html', './hilfe.js',
-  './lucide.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
+  './lucide.js', './vendor/qrcodegen-v1.8.0-es6.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',
   './marker-types.json', './markers/hochsitz.svg', './markers/huette.svg', './markers/leiter.svg',
   './markers/kanzel.svg', './markers/wagen.svg', './markers/drueckjagdbock.svg', './markers/erdsitz.svg', './markers/salzlecke.svg',
   './markers/kirrung.svg', './markers/sonstiges.svg',
