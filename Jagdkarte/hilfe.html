@@ -33,6 +33,7 @@
         <a href="#dateien">Revierdateien</a>
         <a href="#einstellungen">Name und Darstellung</a>
         <a href="#installieren">App auf dem Smartphone</a>
+        <a href="#offline-map">Offline-Karten</a>
         <a href="#probleme">Wenn etwas nicht klappt</a>
       </nav>
       <article class="help-content">
@@ -61,6 +62,7 @@
             <div><dt><i data-lucide="refresh-cw" aria-hidden="true"></i>Aktualisieren</dt><dd>Pfeil im Kreis neben einer Liste: l&auml;dt diese Liste neu. Auf der Karte bedeutet er, dass eine neue App-Version bereitsteht.</dd></div>
             <div><dt><i data-lucide="upload" aria-hidden="true"></i>Revierdatei einlesen</dt><dd>Pfeil nach oben, oben rechts: &uuml;bernimmt eine JWD- oder GeoJSON-Datei. Bei mehreren Gemeindegrenzen kannst du die gew&uuml;nschte Gemeinde als Reviergrenze ausw&auml;hlen.</dd></div>
             <div><dt><i data-lucide="download" aria-hidden="true"></i>Revierdatei speichern</dt><dd>Pfeil nach unten beim gew&auml;hlten Revier: speichert die Grenze als JWD-Datei auf deinem Ger&auml;t.</dd></div>
+            <div><dt><i data-lucide="map" aria-hidden="true"></i>Offline-Karte verwalten</dt><dd>Kartensymbol in der Karte: importiert ein erlaubtes PMTiles-Kartenpaket und verwaltet es auf diesem Ger&auml;t.</dd></div>
             <div><dt><i data-lucide="monitor-down" aria-hidden="true"></i>App installieren</dt><dd>Bildschirm mit einem Pfeil nach unten: legt die Jagdkarte als App auf deinem Ger&auml;t ab. Das Symbol erscheint nur, wenn dein Browser dies anbietet.</dd></div>
             <div><dt><i data-lucide="x" aria-hidden="true"></i>Schlie&szlig;en / Abw&auml;hlen</dt><dd>Kreuz: schlie&szlig;t ein Fenster oder entfernt die aktuelle Revierauswahl. Es l&ouml;scht nicht dein gespeichertes Revier.</dd></div>
           </dl>
@@ -178,8 +180,22 @@
           </ul>
           <p>Die Bezeichnungen k&ouml;nnen je nach Smartphone und Browser abweichen.</p>
           <h3>Ohne Internet</h3>
-          <p>&Ouml;ffne die App und die ben&ouml;tigte Region vorher einmal mit Internetverbindung. Bereits geladene &ouml;ffentliche Reviergrenzen und diese Hilfe k&ouml;nnen danach auch ohne Verbindung verf&uuml;gbar sein. Nicht geladene Stra&szlig;en- und Landschaftskarten k&ouml;nnen fehlen.</p>
+          <p>&Ouml;ffne die App und die ben&ouml;tigte Region vorher einmal mit Internetverbindung. Bereits geladene &ouml;ffentliche Reviergrenzen und diese Hilfe k&ouml;nnen danach auch ohne Verbindung verf&uuml;gbar sein. F&uuml;r eine Offline-Stra&szlig;en- und Landschaftskarte brauchst du zus&auml;tzlich ein importiertes Kartenpaket. Siehe <a href="#offline-map">Offline-Karten</a>.</p>
           <p>F&uuml;r die Anmeldung, private Reviere, neue Markierungen, Einladungen und die Standortfreigabe brauchst du eine Internetverbindung. Verlasse dich unterwegs nicht darauf, dass alle Inhalte ohne Internet verf&uuml;gbar sind.</p>
+        </section>
+        <section id="offline-map">
+          <h2>Offline-Karte beziehen und laden</h2>
+          <p>Jagdkarte liefert derzeit keine fertigen regionalen Kartenpakete zum Herunterladen. Du brauchst eine regionale <strong>.pmtiles</strong>-Datei aus einer Quelle, die die Offline-Nutzung erlaubt. Du kannst einen passenden Anbieter darum bitten oder selbst ein Paket aus einem Protomaps-Tagespaket erstellen. Die <a href="https://docs.protomaps.com/pmtiles/cli" target="_blank" rel="noopener noreferrer">Protomaps-Anleitung</a> beschreibt das Erstellen am Computer.</p>
+          <p>Normale OpenStreetMap-Kacheln und Satellitenbilder von MapTiler d&uuml;rfen nicht einfach gesammelt und offline gespeichert werden. Sie bleiben in der Jagdkarte online-Karten. Verwende nur ein Kartenpaket, dessen Anbieter Offline-Nutzung erlaubt.</p>
+          <h3>Ein vorhandenes Kartenpaket auf dem Smartphone laden</h3>
+          <ol>
+            <li>Speichere die <strong>.pmtiles</strong>-Datei auf deinem Smartphone, zum Beispiel unter <strong>Downloads</strong>.</li>
+            <li>&Ouml;ffne in der Jagdkarte die Karte und tippe in der Werkzeugleiste auf <strong>Offline-Karte verwalten</strong> (Kartensymbol).</li>
+            <li>Tippe auf <strong>Kartenpaket importieren</strong> und w&auml;hle die gespeicherte Datei aus.</li>
+            <li>Warte auf <strong>Offline-Karte ist bereit</strong>. Die Jagdkarte schaltet das geladene Paket ein. Du kannst es sp&auml;ter im selben Fenster mit <strong>Offline-Karte verwenden</strong> ein- und ausschalten.</li>
+          </ol>
+          <p>Das Paket muss eine Vektorkarte mit Protomaps-Basisebenen enthalten. Eine JWD-Revierdatei ist kein Kartenpaket. Das Kartenpaket bleibt nur in diesem Browser auf diesem Ger&auml;t gespeichert; es wird nicht in dein Revierprofil hochgeladen. Mit <strong>Karte entfernen</strong> l&ouml;schst du es wieder.</p>
+          <p>Reviergrenzen und Markierungen werden weiterhin als Kartenebenen dar&uuml;ber angezeigt. Nicht geladene Reviergrenzen, Anmeldung, private Daten und Standortfreigabe brauchen weiterhin Internet.</p>
         </section>
         <section id="probleme">
           <h2>Wenn etwas nicht klappt</h2>
