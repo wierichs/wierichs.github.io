@@ -747,9 +747,15 @@ export async function runAppTests() {
     assert(Number(extraction.fields.sw_lng) < Number(extraction.fields.ne_lng) &&
       Number(extraction.fields.sw_lat) < Number(extraction.fields.ne_lat),
     'Offline extraction should submit the current map viewport in BBBike southwest/northeast coordinates.');
-    assert(control('offline-map-extract-note').textContent.includes('2–7 Minuten') &&
+    assert(control('offline-map-extract-note').textContent.includes('Ohne E-Mail') &&
       control('offline-map-status').textContent.includes('Status'),
-    'The UI should explain that BBBike processing is asynchronous and the resulting file must be imported.');
+    'Without an email address the UI should direct users to the BBBike status page.');
+    control('offline-map-extract-email').value = 'jagd@example.test';
+    control('extract-offline-map').click();
+    await waitFor(() => state.bbbikeRequests.length === 2);
+    assert(state.bbbikeRequests[1].fields.email === 'jagd@example.test' &&
+      control('offline-map-extract-note').textContent.includes('Downloadlink'),
+    'An optional email address should be sent to BBBike and result in clear notification status.');
     passed.push('Offline map extraction submits current bounds to BBBike as an asynchronous PMTiles job');
 
     const shortbreadPackage = new frame.File(['mock BBBike Shortbread archive'], 'bbbike-shortbread.pmtiles', {

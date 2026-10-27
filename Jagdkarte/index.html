@@ -131,8 +131,10 @@
       <p>BBBike erstellt das Paket im Hintergrund. Es dauert meist 2 bis 7 Minuten; der Download erscheint danach auf der BBBike-Statusseite.</p>
       <label for="offline-map-extract-name">Öffentlicher Name des Ausschnitts</label>
       <input id="offline-map-extract-name" type="text" maxlength="60" value="Jagdkarte-Ausschnitt" autocomplete="off">
+      <label for="offline-map-extract-email">E-Mail für den Downloadlink (optional)</label>
+      <input id="offline-map-extract-email" type="email" maxlength="254" autocomplete="email" placeholder="leer lassen für Statusseite">
       <button id="extract-offline-map" class="primary" type="button"><i data-lucide="external-link" aria-hidden="true"></i><span>Auftrag an BBBike senden</span></button>
-      <p id="offline-map-extract-note" role="status">Der Name ist auf der öffentlichen Statusseite sichtbar. Keine persönlichen Daten eintragen.</p>
+      <p id="offline-map-extract-note" role="status">Ohne E-Mail wird der Download auf der Statusseite gelistet. Der Ausschnittname ist öffentlich sichtbar; keine persönlichen Daten eintragen.</p>
       <a class="offline-extract-status-link" href="https://download.bbbike.org/osm/extract/" target="_blank" rel="noopener noreferrer">BBBike-Status und Downloads öffnen</a>
     </section>
     <h3 class="offline-map-import-title">Vorhandenes Kartenpaket laden</h3>

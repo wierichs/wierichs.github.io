@@ -393,8 +393,9 @@ searches require a connection. The map toolbar's **Offline-Karte** control
 imports a regional `.pmtiles` vector-basemap package and keeps it in this
 browser's IndexedDB; the package is never uploaded. The dialog submits the
 current map bounds to the free BBBike extract service in Shortbread format.
-BBBike processes requests asynchronously; with `email=nobody`, users find the
-download on BBBike's public status page and then import it into Jagdkarte.
+BBBike processes requests asynchronously. Email notification is optional: with
+no address the download appears on BBBike's public status page; with an address
+BBBike emails the download link. Users then import the file into Jagdkarte.
 Packages are restored and used offline on later launches. Offline rendering
 supports Protomaps and Shortbread vector schemas. MapLibre renders the
 base layer beneath the existing Leaflet boundaries, markers, and controls.

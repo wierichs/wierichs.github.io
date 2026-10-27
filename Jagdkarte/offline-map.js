@@ -119,6 +119,7 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
   const removeButton = document.getElementById('remove-offline-map');
   const extractButton = document.getElementById('extract-offline-map');
   const extractName = document.getElementById('offline-map-extract-name');
+  const extractEmail = document.getElementById('offline-map-extract-email');
   const extractNote = document.getElementById('offline-map-extract-note');
   let record = null;
   let maplibreMap = null;
@@ -271,7 +272,9 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
     try {
       const bounds = leafletMap.getBounds();
       const city = extractName.value.trim();
+      const email = extractEmail.value.trim();
       if (!city || city.length > 60) throw new Error('Bitte einen Namen mit 1 bis 60 Zeichen eingeben.');
+      if (email && !extractEmail.validity.valid) throw new Error('Bitte eine gültige E-Mail-Adresse eingeben oder das Feld leer lassen.');
 
       const fields = {
         sw_lng: bounds.getWest().toFixed(6),
@@ -279,7 +282,7 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
         ne_lng: bounds.getEast().toFixed(6),
         ne_lat: bounds.getNorth().toFixed(6),
         format: 'pmtiles-shortbread',
-        email: 'nobody',
+        email: email || 'nobody',
         as: '1',
         city
       };
@@ -299,8 +302,12 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
       document.body.append(form);
       form.submit();
       form.remove();
-      extractNote.textContent = 'BBBike erstellt den Ausschnitt im Hintergrund. Nach etwa 2–7 Minuten findest du den Download auf der Statusseite.';
-      setStatus('BBBike-Auftrag gesendet. Öffne „BBBike-Status und Downloads“, lade die PMTiles-Datei herunter und importiere sie anschließend hier.');
+      extractNote.textContent = email
+        ? 'BBBike sendet den Downloadlink nach der Verarbeitung an die angegebene Adresse.'
+        : 'Ohne E-Mail erscheint der Download nach der Verarbeitung auf der BBBike-Statusseite.';
+      setStatus(email
+        ? 'BBBike-Auftrag gesendet. Der Downloadlink wird per E-Mail zugeschickt.'
+        : 'BBBike-Auftrag gesendet. Öffne nach der Verarbeitung die Statusseite und importiere die PMTiles-Datei hier.');
     } catch (error) {
       setStatus(error.message || 'Offline-Kartenausschnitt konnte nicht erstellt werden.');
     } finally {
