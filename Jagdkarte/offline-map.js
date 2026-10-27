@@ -345,7 +345,7 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
   host.hidden = true;
   renderStatus();
 
-  void loadOfflineMap().then(async saved => {
+  const ready = loadOfflineMap().then(async saved => {
     record = saved;
     renderStatus();
     if (record && preference) await setActive(true);
@@ -353,6 +353,10 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
 
   return {
     isActive: () => active,
-    setVisible
+    setVisible,
+    setActive: async nextActive => {
+      await ready;
+      return setActive(nextActive);
+    }
   };
 }

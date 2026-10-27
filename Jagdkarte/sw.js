@@ -1,4 +1,4 @@
-const CACHE = 'jagdkarte-shell-v115';
+const CACHE = 'jagdkarte-shell-v116';
 const SHELL = ['./', './index.html', './style.css', './app.js?v=86', './offline-map.js', './offline-map-storage.js',
   './data.js', './config.js', './hilfe.html', './hilfe.js',
   './lucide.js', './vendor/qrcodegen-v1.8.0-es6.js', './supabase.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './neuss.geojson',

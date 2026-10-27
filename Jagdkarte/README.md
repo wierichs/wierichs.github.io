@@ -399,6 +399,9 @@ BBBike emails the download link. Users then import the file into Jagdkarte.
 Packages are restored and used offline on later launches. Offline rendering
 supports Protomaps and Shortbread vector schemas. MapLibre renders the
 base layer beneath the existing Leaflet boundaries, markers, and controls.
+When a district is selected, the Offline-Karte toggle is remembered separately
+for that district on this device. Without a selected district, it sets the
+default basemap preference.
 Standard OSM tiles and MapTiler satellite imagery remain online-only. The app
 does not prefetch OSM tiles, respecting the tile usage policy:
 https://operations.osmfoundation.org/policies/tiles/ . For offline basemaps,

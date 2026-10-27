@@ -243,6 +243,9 @@ export async function initializeAppFixture() {
       return Promise.resolve(new Response(JSON.stringify({ type: 'FeatureCollection', features: [{
         type: 'Feature', id: 'map-click-district', properties: { id: 'map-click-district', name: 'Klicktest-Revier' },
         geometry: { type: 'Polygon', coordinates: [[[7, 52], [9, 52], [9, 54], [7, 54], [7, 52]]] }
+      }, {
+        type: 'Feature', id: 'map-click-district-2', properties: { id: 'map-click-district-2', name: 'Zweites Klicktest-Revier' },
+        geometry: { type: 'Polygon', coordinates: [[[10, 52], [12, 52], [12, 54], [10, 54], [10, 52]]] }
       }] }), { headers: { 'Content-Type': 'application/geo+json' } }));
     }
     return nativeFetch(input, options);
@@ -273,9 +276,11 @@ export async function runAppTests() {
   const selectionStorageKey = 'jagdkarte-last-selection-v1';
   const profileStorageKey = 'jagdkarte-last-profile-v1';
   const locationConsentStorageKey = 'jagdkarte-location-consent-v1';
+  const basemapPreferencesStorageKey = 'jagdkarte-basemap-preferences-v1';
   const previousSelection = localStorage.getItem(selectionStorageKey);
   const previousProfileChoice = localStorage.getItem(profileStorageKey);
   const previousLocationConsents = localStorage.getItem(locationConsentStorageKey);
+  const previousBasemapPreferences = localStorage.getItem(basemapPreferencesStorageKey);
   const offlinePreferenceKey = 'jagdkarte-offline-map-enabled-v1';
   const previousOfflinePreference = localStorage.getItem(offlinePreferenceKey);
   const previousOfflineMap = await loadOfflineMap();
@@ -284,6 +289,7 @@ export async function runAppTests() {
   localStorage.removeItem(selectionStorageKey);
   localStorage.removeItem(profileStorageKey);
   localStorage.removeItem(locationConsentStorageKey);
+  localStorage.removeItem(basemapPreferencesStorageKey);
   window.__jagdkarteTestBoundaryCache = new Map();
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;left:-10000px;width:1200px;height:800px;border:0';
@@ -714,8 +720,8 @@ export async function runAppTests() {
       control('offline-map-enabled').checked && control('offline-map-current').textContent.includes('test-region.pmtiles'),
     'Importing a PMTiles package should persist and activate the offline basemap.');
     state.map.setView([50, 8], 10);
-    await waitFor(() => state.maplibreMaps[0].view?.center?.[0] === 8 &&
-      state.maplibreMaps[0].view?.center?.[1] === 50 && state.maplibreMaps[0].view.zoom === 9);
+    await waitFor(() => Math.abs(state.maplibreMaps[0].view?.center?.[0] - 8) < .001 &&
+      Math.abs(state.maplibreMaps[0].view?.center?.[1] - 50) < .001 && state.maplibreMaps[0].view.zoom === 9);
     satelliteButton.click();
     assert(control('offline-basemap').hidden && state.map.hasLayer(state.tileLayers[1]),
       'Satellite switching should temporarily hide the offline basemap.');
@@ -738,6 +744,26 @@ export async function runAppTests() {
       Math.abs(restoredBounds[1][0] - 50.2) < .001 &&
       Math.abs(restoredBounds[1][1] - 6.8) < .001,
     'Offline basemap should fit to the stored archive bounds when reactivated.');
+    change('source', 'map-click-test');
+    await waitFor(() => control('results').querySelectorAll('button').length === 2);
+    const districtButtons = Array.from(control('results').querySelectorAll('button'));
+    districtButtons[0].click();
+    await waitFor(() => control('selected-name').textContent === 'Klicktest-Revier');
+    control('offline-map-enabled').checked = false;
+    control('offline-map-enabled').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    districtButtons[1].click();
+    await waitFor(() => control('selected-name').textContent === 'Zweites Klicktest-Revier');
+    control('offline-map-enabled').checked = true;
+    control('offline-map-enabled').dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => !control('offline-basemap').hidden);
+    districtButtons[0].click();
+    await waitFor(() => control('selected-name').textContent === 'Klicktest-Revier' && control('offline-basemap').hidden);
+    assert(state.map.hasLayer(state.baseTile) &&
+      control('offline-map-enabled-label').textContent.includes('dieses Revier'),
+    'Switching districts should restore each district saved basemap choice.');
+    districtButtons[1].click();
+    await waitFor(() => control('selected-name').textContent === 'Zweites Klicktest-Revier' && !control('offline-basemap').hidden);
+    passed.push('Offline basemap preference is restored independently for each selected district');
     control('remove-offline-map').click();
     await waitFor(() => control('offline-map-current').textContent === 'Keine Offline-Karte installiert.');
     assert(!control('offline-map-enabled').checked && control('offline-basemap').hidden &&
@@ -796,5 +822,7 @@ export async function runAppTests() {
     else localStorage.setItem(profileStorageKey, previousProfileChoice);
     if (previousLocationConsents === null) localStorage.removeItem(locationConsentStorageKey);
     else localStorage.setItem(locationConsentStorageKey, previousLocationConsents);
+    if (previousBasemapPreferences === null) localStorage.removeItem(basemapPreferencesStorageKey);
+    else localStorage.setItem(basemapPreferencesStorageKey, previousBasemapPreferences);
   }
 }

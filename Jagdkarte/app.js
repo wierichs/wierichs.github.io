@@ -5,6 +5,7 @@ import { createOfflineBasemap } from './offline-map.js';
 const config = window.JAGDKARTE_CONFIG;
 const boundaryCacheName = 'jagdkarte-boundaries-v1';
 const selectionStorageKey = 'jagdkarte-last-selection-v1';
+const basemapPreferencesStorageKey = 'jagdkarte-basemap-preferences-v1';
 const profileSelectionStorageKey = 'jagdkarte-last-profile-v1';
 const locationConsentStorageKey = 'jagdkarte-location-consent-v1';
 const markerIconSizeStorageKey = 'jagdkarte-marker-icon-size-v1';
@@ -199,6 +200,10 @@ map.on('baselayerchange', event => {
   syncBasemapVisibility();
 });
 offlineBasemap = createOfflineBasemap(map, syncBasemapVisibility);
+element('offline-map-enabled').addEventListener('change', event => {
+  if (!selected) return;
+  saveBasemapPreference(currentSource(), selectedFeatureId(), event.currentTarget.checked);
+});
 syncBasemapVisibility();
 tiles.on('tileerror', () => {
   if (!tileWarningShown && !offlineBasemap?.isActive()) {
@@ -569,6 +574,35 @@ function featureIdentifier(feature, source) {
 }
 
 function selectedFeatureId() { return featureIdentifier(selected, currentSource()); }
+
+function readBasemapPreference(source, featureId) {
+  if (!source || !featureId) return null;
+  try {
+    const preferences = JSON.parse(localStorage.getItem(basemapPreferencesStorageKey) || '{}');
+    const preference = preferences[JSON.stringify([source.id, featureId])];
+    return typeof preference === 'boolean' ? preference : null;
+  } catch { return null; }
+}
+
+function saveBasemapPreference(source, featureId, enabled) {
+  if (!source || !featureId) return;
+  try {
+    const stored = JSON.parse(localStorage.getItem(basemapPreferencesStorageKey) || '{}');
+    const preferences = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+    preferences[JSON.stringify([source.id, featureId])] = Boolean(enabled);
+    localStorage.setItem(basemapPreferencesStorageKey, JSON.stringify(preferences));
+  } catch {}
+}
+
+function applySelectedBasemapPreference() {
+  const preference = readBasemapPreference(currentSource(), selectedFeatureId());
+  if (preference !== null) void offlineBasemap.setActive(preference);
+}
+
+function updateBasemapPreferenceLabel() {
+  element('offline-map-enabled-label').textContent = selected && selectedFeatureId()
+    ? 'Offline-Karte für dieses Revier verwenden' : 'Offline-Karte verwenden';
+}
 
 function readSavedSelection() {
   try {
@@ -1682,6 +1716,7 @@ function clearSelection() {
   if (boundary) map.removeLayer(boundary);
   boundary = null;
   selected = null;
+  updateBasemapPreferenceLabel();
   selectedPanelView = 'search';
   element('app-layout').classList.remove('has-selection');
   element('app-layout').classList.remove('selection-search-active');
@@ -1713,6 +1748,8 @@ function clearSelection() {
 function selectFeature(feature, button, preferredProfileId) {
   clearSelection();
   selected = feature;
+  updateBasemapPreferenceLabel();
+  applySelectedBasemapPreference();
   setSelectedPanelView('details');
   const source = currentSource();
   const featureId = selectedFeatureId();
