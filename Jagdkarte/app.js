@@ -45,7 +45,7 @@ const offlineBasemapAttribution = '<a href="https://protomaps.com/" target="_bla
 function syncBasemapVisibility() {
   const satelliteEnabled = Boolean(satelliteTiles && map.hasLayer(satelliteTiles));
   const offlineEnabled = !satelliteEnabled && Boolean(offlineBasemap?.isActive());
-  if (satelliteEnabled || offlineEnabled) {
+  if (satelliteEnabled) {
     if (map.hasLayer(tiles)) map.removeLayer(tiles);
   } else if (!map.hasLayer(tiles)) tiles.addTo(map);
   offlineBasemap?.setVisible(offlineEnabled);
@@ -206,7 +206,7 @@ element('offline-map-enabled').addEventListener('change', event => {
 });
 syncBasemapVisibility();
 tiles.on('tileerror', () => {
-  if (!tileWarningShown && !offlineBasemap?.isActive()) {
+  if (!tileWarningShown) {
     showMapStatus('Hintergrundkarte nicht verfuegbar. Internetverbindung pruefen.', 'error');
     tileWarningShown = true;
   }
@@ -1084,7 +1084,6 @@ async function registerProfileBoundary(profile) {
 
 async function loadProfileMarkers() {
   const revision = ++profileRevision;
-  clearProfileMarkers();
   if (!supabaseClient || !activeProfile || !user) return;
   const profileId = activeProfile.id;
   const userId = user.id;
@@ -1096,6 +1095,7 @@ async function loadProfileMarkers() {
     profileStatus(`Markierungen konnten nicht geladen werden: ${error.message}`);
     return;
   }
+  clearProfileMarkers();
   (data || []).forEach(marker => {
     const expiresAt = marker.expires_at ? new Date(marker.expires_at).getTime() : null;
     if (expiresAt !== null && (!Number.isFinite(expiresAt) || expiresAt <= Date.now())) return;

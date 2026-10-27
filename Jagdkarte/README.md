@@ -402,12 +402,17 @@ base layer beneath the existing Leaflet boundaries, markers, and controls.
 When a district is selected, the Offline-Karte toggle is remembered separately
 for that district on this device. Without a selected district, it sets the
 default basemap preference.
-Standard OSM tiles and MapTiler satellite imagery remain online-only. The app
-does not prefetch OSM tiles, respecting the tile usage policy:
+Where the PMTiles package has no coverage, online OSM tiles remain visible as
+a fallback beneath the transparent offline map. OSM tiles and MapTiler satellite
+imagery remain online-only; the app does not prefetch or store OSM tiles,
+respecting the tile usage policy:
 https://operations.osmfoundation.org/policies/tiles/ . For offline basemaps,
 only use a provider that explicitly permits them or a package you prepared
 yourself. Offline authentication is not simulated. Loaded polygons remain
 cached across reloads.
+Profile markers already loaded in an open session remain visible if a refresh
+fails while offline, even without a basemap. They are not persisted locally;
+after a restart, private markers must be loaded from Supabase again.
 
 BBBike extracts are asynchronous and subject to its fair-use policy. The
 extract name is public; do not enter personal or confidential information.

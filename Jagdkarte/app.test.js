@@ -7,7 +7,8 @@ export async function initializeAppFixture() {
     stylesheet.href = `${stylesheet.href}?fixture=${Date.now()}`;
     document.head.append(stylesheet);
   }
-  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, profileQueries: 0, pendingMode: null, holdMode: false,
+  const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, profileQueries: 0, markerQueries: 0,
+    failMarkerQuery: false, pendingMode: null, holdMode: false,
     denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
     boundaryRequests: [], createdProfiles: [], importedProfiles: [], networkRequests: 0,
     dogs: [], dogLocations: [], createdDogs: [], issuedDogDevices: [], bbbikeRequests: [], tileLayers: [],
@@ -128,10 +129,12 @@ export async function initializeAppFixture() {
       delete() { write = true; return this; },
       then(resolve, reject) {
         if (table === 'hunting_profiles' && !write) state.profileQueries += 1;
+        if (table === 'hunting_markers' && !write) state.markerQueries += 1;
         let data = write ? [] : rowsFor(table).filter(row => filters.every(([key, value]) => row[key] === value) &&
           minimums.every(([key, value]) => row[key] >= value));
         if (range) data = data.slice(range[0], range[1] + 1);
-        return Promise.resolve({ data: single ? data[0] || null : data, error: null }).then(resolve, reject);
+        const error = table === 'hunting_markers' && state.failMarkerQuery ? { message: 'Failed to fetch' } : null;
+        return Promise.resolve({ data: error ? null : single ? data[0] || null : data, error }).then(resolve, reject);
       }
     };
   };
@@ -422,6 +425,20 @@ export async function runAppTests() {
     await waitFor(() => control('dog-device-token').value === '' && control('dog-device-qr').width === 0);
     passed.push('Dogs can be registered, paired, and displayed outside the selected district');
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
+    const profileMarkerSelector = '#map .leaflet-marker-pane img[src*="sonstiges.svg"]';
+    await waitFor(() => frame.document.querySelector(profileMarkerSelector));
+    state.failMarkerQuery = true;
+    const markerQueriesBeforeOfflineRefresh = state.markerQueries;
+    frame.document.dispatchEvent(new frame.Event('visibilitychange'));
+    await waitFor(() => state.markerQueries > markerQueriesBeforeOfflineRefresh &&
+      control('profile-status').textContent.includes('Failed to fetch'));
+    assert(frame.document.querySelector(profileMarkerSelector),
+      'Already loaded profile markers should remain visible when the server cannot be reached.');
+    state.failMarkerQuery = false;
+    const markerQueriesBeforeRecovery = state.markerQueries;
+    frame.document.dispatchEvent(new frame.Event('visibilitychange'));
+    await waitFor(() => state.markerQueries > markerQueriesBeforeRecovery && frame.document.querySelector(profileMarkerSelector));
+    passed.push('Loaded profile markers remain visible after an offline refresh failure');
     control('search-tab').click();
     const profileQueriesBeforeMapClick = state.profileQueries;
     state.map.fire('click', { latlng: frame.L.latLng(49.6, 6.6) });
@@ -716,9 +733,13 @@ export async function runAppTests() {
     Object.defineProperty(offlineFileInput, 'files', { configurable: true, value: [offlinePackage] });
     offlineFileInput.dispatchEvent(new frame.Event('change', { bubbles: true }));
     await waitFor(() => state.maplibreMaps.length === 1 && state.maplibreMaps[0].view);
-    assert(!control('offline-basemap').hidden && !state.map.hasLayer(state.baseTile) &&
+    assert(!control('offline-basemap').hidden && state.map.hasLayer(state.baseTile) &&
       control('offline-map-enabled').checked && control('offline-map-current').textContent.includes('test-region.pmtiles'),
-    'Importing a PMTiles package should persist and activate the offline basemap.');
+    'Importing a PMTiles package should activate it above the online fallback tiles.');
+    const backgroundLayer = state.maplibreMaps[0].options.style.layers.find(layer => layer.type === 'background');
+    assert(backgroundLayer?.paint?.['background-opacity'] === 0 &&
+      control('offline-basemap').parentElement.style.zIndex === '300',
+    'Offline rendering should be transparent outside archive coverage and remain between base tiles and overlays.');
     state.map.setView([50, 8], 10);
     await waitFor(() => Math.abs(state.maplibreMaps[0].view?.center?.[0] - 8) < .001 &&
       Math.abs(state.maplibreMaps[0].view?.center?.[1] - 50) < .001 && state.maplibreMaps[0].view.zoom === 9);
@@ -726,8 +747,8 @@ export async function runAppTests() {
     assert(control('offline-basemap').hidden && state.map.hasLayer(state.tileLayers[1]),
       'Satellite switching should temporarily hide the offline basemap.');
     satelliteButton.click();
-    assert(!control('offline-basemap').hidden && !state.map.hasLayer(state.baseTile),
-      'Returning from satellite imagery should restore the selected offline basemap.');
+    assert(!control('offline-basemap').hidden && state.map.hasLayer(state.baseTile),
+      'Returning from satellite imagery should restore the offline basemap above online fallback tiles.');
     control('offline-map-enabled').checked = false;
     control('offline-map-enabled').dispatchEvent(new frame.Event('change', { bubbles: true }));
     assert(control('offline-basemap').hidden && state.map.hasLayer(state.baseTile),
@@ -801,7 +822,8 @@ export async function runAppTests() {
     offlineFileInput.dispatchEvent(new frame.Event('change', { bubbles: true }));
     await waitFor(() => state.maplibreMaps.length === 2 && !control('offline-basemap').hidden);
     const shortbreadStyle = state.maplibreMaps[1].options.style;
-    assert(shortbreadStyle.layers.some(layer => layer['source-layer'] === 'streets') &&
+    assert(shortbreadStyle.layers.find(layer => layer.type === 'background')?.paint?.['background-opacity'] === 0 &&
+      shortbreadStyle.layers.some(layer => layer['source-layer'] === 'streets') &&
       shortbreadStyle.layers.some(layer => layer['source-layer'] === 'water_polygons') &&
       shortbreadStyle.layers.some(layer => layer['source-layer'] === 'land'),
     'BBBike Shortbread packages should use the Shortbread style instead of requiring Protomaps layers.');

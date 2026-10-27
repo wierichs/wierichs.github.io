@@ -51,7 +51,9 @@ function createStyle(prepared) {
     attribution
   };
   if (prepared.styleType === 'shortbread') {
-    const layers = [{ id: 'background', type: 'background', paint: { 'background-color': '#f4f3ee' } }];
+    const layers = [{ id: 'background', type: 'background', paint: {
+      'background-color': '#f4f3ee', 'background-opacity': 0
+    } }];
     const addLayer = (id, type, sourceLayer, paint, extra = {}) => {
       if (prepared.availableLayers.has(sourceLayer)) layers.push({
         id, type, source: basemapSourceId, 'source-layer': sourceLayer, paint, ...extra
@@ -95,7 +97,9 @@ function createStyle(prepared) {
     };
   }
   const layers = window.basemaps.layers(basemapSourceId, window.basemaps.namedFlavor('light'), { lang: 'de' })
-    .filter(layer => !layer['source-layer'] || prepared.availableLayers.has(layer['source-layer']));
+    .filter(layer => !layer['source-layer'] || prepared.availableLayers.has(layer['source-layer']))
+    .map(layer => layer.type === 'background'
+      ? { ...layer, paint: { ...layer.paint, 'background-opacity': 0 } } : layer);
   return {
     version: 8,
     glyphs: `${assetRoot}fonts/{fontstack}/{range}.pbf`,
@@ -111,6 +115,10 @@ function createStyle(prepared) {
 
 export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
   const host = document.getElementById('offline-basemap');
+  const pane = leafletMap.createPane('offlineBasemap');
+  pane.style.zIndex = '300';
+  pane.style.pointerEvents = 'none';
+  pane.append(host);
   const dialog = document.getElementById('offline-map-dialog');
   const fileInput = document.getElementById('offline-map-file');
   const current = document.getElementById('offline-map-current');
