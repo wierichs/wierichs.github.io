@@ -10,7 +10,7 @@ export async function initializeAppFixture() {
   const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, profileQueries: 0, pendingMode: null, holdMode: false,
     denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
     boundaryRequests: [], createdProfiles: [], importedProfiles: [], networkRequests: 0,
-    dogs: [], dogLocations: [], createdDogs: [], issuedDogDevices: [], tileLayers: [],
+    dogs: [], dogLocations: [], createdDogs: [], issuedDogDevices: [], bbbikeRequests: [], tileLayers: [],
     currentPosition: { latitude: 49.5, longitude: 6.5 } };
   const boundaryCache = window.parent.__jagdkarteTestBoundaryCache || new Map();
   state.boundaryCache = boundaryCache;
@@ -30,7 +30,12 @@ export async function initializeAppFixture() {
   class TestPmtilesArchive {
     constructor(source) { this.source = source; }
     async getHeader() { return { tileType: 1, minLon: 6.2, minLat: 49.8, maxLon: 6.8, maxLat: 50.2 }; }
-    async getMetadata() { return { vector_layers: [{ id: 'earth' }, { id: 'roads' }, { id: 'water' }] }; }
+      async getMetadata() {
+      const layers = (await this.source.file.text()).includes('Shortbread')
+          ? ['land', 'streets', 'water_polygons', 'place_labels', 'buildings', 'pois']
+          : ['earth', 'roads', 'water'];
+        return { vector_layers: layers.map(id => ({ id })) };
+      }
   }
   class TestPmtilesProtocol {
     constructor() { this.tiles = new Map(); }
@@ -75,6 +80,14 @@ export async function initializeAppFixture() {
     [[[8, 49], [9, 49], [9, 50], [8, 50], [8, 49]]]
   ] };
   let authCallback = () => {};
+  window.HTMLFormElement.prototype.submit = function submitBbbikeForm() {
+    state.bbbikeRequests.push({
+      action: this.action,
+      method: this.method,
+      target: this.target,
+      fields: Object.fromEntries(new FormData(this).entries())
+    });
+  };
   const profile = () => ({ id: 'test-profile', source_id: 'user-imports', feature_id: 'jwd-test',
     district_name: 'Privates Testrevier', owner_id: 'owner', created_at: '2026-01-01',
     hunting_mode: state.mode, boundary_geojson: state.boundaryGeometry });
@@ -215,7 +228,8 @@ export async function initializeAppFixture() {
   });
   const nativeFetch = window.fetch.bind(window);
   window.fetch = (input, options) => {
-    const requestUrl = new URL(typeof input === 'string' ? input : input.url, location.href);
+    const requestValue = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const requestUrl = new URL(requestValue, location.href);
     if (requestUrl.pathname.endsWith('/map-click-test.geojson')) {
       state.networkRequests += 1;
       if (state.offlineRestore) return Promise.reject(new TypeError('Failed to fetch'));
@@ -719,6 +733,39 @@ export async function runAppTests() {
     assert(!control('offline-map-enabled').checked && control('offline-basemap').hidden &&
       state.map.hasLayer(state.baseTile), 'Removing the offline package should fall back to OpenStreetMap.');
     passed.push('Offline PMTiles import, persistence, camera sync and basemap switching work');
+
+    state.map.setView([50, 8], 10);
+    control('offline-map-extract-name').value = 'MeinAppAusschnitt';
+    control('extract-offline-map').click();
+    await waitFor(() => state.bbbikeRequests.length === 1);
+    const extraction = state.bbbikeRequests[0];
+    assert(extraction.action === 'https://extract.bbbike.org/' && extraction.method === 'post' &&
+      extraction.target === '_blank' && extraction.fields.format === 'pmtiles-shortbread' &&
+      extraction.fields.email === 'nobody' && extraction.fields.as === '1' &&
+      extraction.fields.city === 'MeinAppAusschnitt',
+    'Offline extraction should submit the BBBike format, status-list name, and background options.');
+    assert(Number(extraction.fields.sw_lng) < Number(extraction.fields.ne_lng) &&
+      Number(extraction.fields.sw_lat) < Number(extraction.fields.ne_lat),
+    'Offline extraction should submit the current map viewport in BBBike southwest/northeast coordinates.');
+    assert(control('offline-map-extract-note').textContent.includes('2–7 Minuten') &&
+      control('offline-map-status').textContent.includes('Status'),
+    'The UI should explain that BBBike processing is asynchronous and the resulting file must be imported.');
+    passed.push('Offline map extraction submits current bounds to BBBike as an asynchronous PMTiles job');
+
+    const shortbreadPackage = new frame.File(['mock BBBike Shortbread archive'], 'bbbike-shortbread.pmtiles', {
+      type: 'application/octet-stream'
+    });
+    Object.defineProperty(offlineFileInput, 'files', { configurable: true, value: [shortbreadPackage] });
+    offlineFileInput.dispatchEvent(new frame.Event('change', { bubbles: true }));
+    await waitFor(() => state.maplibreMaps.length === 2 && !control('offline-basemap').hidden);
+    const shortbreadStyle = state.maplibreMaps[1].options.style;
+    assert(shortbreadStyle.layers.some(layer => layer['source-layer'] === 'streets') &&
+      shortbreadStyle.layers.some(layer => layer['source-layer'] === 'water_polygons') &&
+      shortbreadStyle.layers.some(layer => layer['source-layer'] === 'land'),
+    'BBBike Shortbread packages should use the Shortbread style instead of requiring Protomaps layers.');
+    control('remove-offline-map').click();
+    await waitFor(() => control('offline-map-current').textContent === 'Keine Offline-Karte installiert.');
+    passed.push('BBBike Shortbread PMTiles packages are accepted and rendered');
     return passed;
   } finally {
     iframe.remove();

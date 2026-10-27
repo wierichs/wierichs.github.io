@@ -172,6 +172,15 @@ input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; }
 #offline-map-dialog { width: min(420px, calc(100% - 24px)); max-height: min(80dvh, 620px); overflow-y: auto; }
 #offline-map-dialog > p { color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 #offline-map-dialog > button { margin-top: 8px; }
+#offline-map-dialog h3 { margin: 14px 0 6px; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.offline-map-extract { min-width: 0; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: #f7faf8; }
+.offline-map-extract h3 { margin: 0 0 6px !important; }
+.offline-map-extract p { margin: 6px 0 10px; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.offline-map-extract label { margin-top: 8px; }
+.offline-map-extract input { width: 100%; margin: 0 0 8px; }
+.offline-map-extract button { width: 100%; }
+.offline-extract-status-link { display: inline-block; margin-top: 10px; font-size: 12px; overflow-wrap: anywhere; }
+.offline-map-import-title { margin-top: 16px !important; }
 #offline-map-dialog .offline-map-toggle { margin-top: 14px; }
 #offline-map-status:empty { display: none; }
 .offline-map-local-note { border-top: 1px solid var(--line); padding-top: 10px; font-size: 12px !important; }

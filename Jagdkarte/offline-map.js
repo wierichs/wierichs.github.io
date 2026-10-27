@@ -34,14 +34,66 @@ async function prepareArchive(file) {
   }
   const metadata = await archive.getMetadata();
   const availableLayers = new Set((metadata?.vector_layers || []).map(layer => layer.id));
-  if (!availableLayers.has('earth') || !availableLayers.has('roads') || !availableLayers.has('water')) {
-    throw new Error('Das Paket braucht Protomaps-Basiskartenebenen (earth, roads und water).');
+  const isProtomaps = ['earth', 'roads', 'water'].every(layer => availableLayers.has(layer));
+  const isShortbread = ['land', 'streets', 'water_polygons'].every(layer => availableLayers.has(layer));
+  if (!isProtomaps && !isShortbread) {
+    throw new Error('Das Paket braucht Protomaps- oder Shortbread-Kartenebenen.');
   }
-  return { archive, archiveFile, header, metadata, availableLayers };
+  return { archive, archiveFile, header, metadata, availableLayers,
+    styleType: isShortbread ? 'shortbread' : 'protomaps' };
 }
 
 function createStyle(prepared) {
   const assetRoot = new URL('./vendor/protomaps/', location.href).href;
+  const source = {
+    type: 'vector',
+    url: `pmtiles://${prepared.archiveFile.name}`,
+    attribution
+  };
+  if (prepared.styleType === 'shortbread') {
+    const layers = [{ id: 'background', type: 'background', paint: { 'background-color': '#f4f3ee' } }];
+    const addLayer = (id, type, sourceLayer, paint, extra = {}) => {
+      if (prepared.availableLayers.has(sourceLayer)) layers.push({
+        id, type, source: basemapSourceId, 'source-layer': sourceLayer, paint, ...extra
+      });
+    };
+    addLayer('shortbread-land', 'fill', 'land', { 'fill-color': '#e9e9df' });
+    addLayer('shortbread-water', 'fill', 'water_polygons', { 'fill-color': '#b9dbe7' });
+    addLayer('shortbread-sites', 'fill', 'sites', { 'fill-color': '#dce7d6', 'fill-opacity': 0.8 });
+    addLayer('shortbread-boundaries', 'line', 'boundaries', {
+      'line-color': '#aa8c84', 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 12, 1]
+    });
+    addLayer('shortbread-water-lines', 'line', 'water_lines', {
+      'line-color': '#8ec5d8', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.5, 14, 2]
+    });
+    addLayer('shortbread-street-polygons', 'fill', 'street_polygons', { 'fill-color': '#c9c4ba' });
+    addLayer('shortbread-streets', 'line', 'streets', {
+      'line-color': '#b8b2a7', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.35, 14, 2]
+    });
+    addLayer('shortbread-buildings', 'fill', 'buildings', { 'fill-color': '#d4d0c8' }, { minzoom: 13 });
+    const labelLayout = {
+      'text-field': ['coalesce', ['get', 'name'], ['get', 'ref']],
+      'text-font': ['Noto Sans Medium'],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 5, 10, 14, 14],
+      'text-max-width': 8
+    };
+    addLayer('shortbread-place-labels', 'symbol', 'place_labels', {
+      'text-color': '#404942', 'text-halo-color': '#f5f4ef', 'text-halo-width': 1.2
+    }, { layout: { ...labelLayout, 'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 14, 15] } });
+    addLayer('shortbread-street-labels', 'symbol', 'street_labels', {
+      'text-color': '#5e5b54', 'text-halo-color': '#f7f6f2', 'text-halo-width': 1
+    }, { layout: labelLayout, minzoom: 11 });
+    addLayer('shortbread-pois', 'circle', 'pois', {
+      'circle-radius': 2.5, 'circle-color': '#ad7550', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1
+    }, { minzoom: 13 });
+    return {
+      version: 8,
+      glyphs: `${assetRoot}fonts/{fontstack}/{range}.pbf`,
+      sprite: `${assetRoot}sprites/light`,
+      sources: { [basemapSourceId]: source },
+      layers
+    };
+  }
   const layers = window.basemaps.layers(basemapSourceId, window.basemaps.namedFlavor('light'), { lang: 'de' })
     .filter(layer => !layer['source-layer'] || prepared.availableLayers.has(layer['source-layer']));
   return {
@@ -50,9 +102,7 @@ function createStyle(prepared) {
     sprite: `${assetRoot}sprites/light`,
     sources: {
       [basemapSourceId]: {
-        type: 'vector',
-        url: `pmtiles://${prepared.archiveFile.name}`,
-        attribution
+        ...source
       }
     },
     layers
@@ -67,6 +117,9 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
   const status = document.getElementById('offline-map-status');
   const enabledInput = document.getElementById('offline-map-enabled');
   const removeButton = document.getElementById('remove-offline-map');
+  const extractButton = document.getElementById('extract-offline-map');
+  const extractName = document.getElementById('offline-map-extract-name');
+  const extractNote = document.getElementById('offline-map-extract-note');
   let record = null;
   let maplibreMap = null;
   let archive = null;
@@ -189,6 +242,7 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
       renderStatus();
       setStatus(error.message || 'Offline-Karte konnte nicht geladen werden.');
       onActiveChange(false);
+      return false;
     }
   }
 
@@ -204,6 +258,7 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
       storePreference(true);
       renderStatus();
       await setActive(true, prepared);
+      return active && record?.file === file;
     } catch (error) {
       setStatus(error.message || 'Kartenpaket konnte nicht importiert werden.');
     } finally {
@@ -211,8 +266,51 @@ export function createOfflineBasemap(leafletMap, onActiveChange = () => {}) {
     }
   }
 
+  async function extractCurrentView() {
+    extractButton.disabled = true;
+    try {
+      const bounds = leafletMap.getBounds();
+      const city = extractName.value.trim();
+      if (!city || city.length > 60) throw new Error('Bitte einen Namen mit 1 bis 60 Zeichen eingeben.');
+
+      const fields = {
+        sw_lng: bounds.getWest().toFixed(6),
+        sw_lat: bounds.getSouth().toFixed(6),
+        ne_lng: bounds.getEast().toFixed(6),
+        ne_lat: bounds.getNorth().toFixed(6),
+        format: 'pmtiles-shortbread',
+        email: 'nobody',
+        as: '1',
+        city
+      };
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = 'https://extract.bbbike.org/';
+      form.target = '_blank';
+      form.rel = 'noopener noreferrer';
+      form.hidden = true;
+      for (const [name, value] of Object.entries(fields)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.append(input);
+      }
+      document.body.append(form);
+      form.submit();
+      form.remove();
+      extractNote.textContent = 'BBBike erstellt den Ausschnitt im Hintergrund. Nach etwa 2–7 Minuten findest du den Download auf der Statusseite.';
+      setStatus('BBBike-Auftrag gesendet. Öffne „BBBike-Status und Downloads“, lade die PMTiles-Datei herunter und importiere sie anschließend hier.');
+    } catch (error) {
+      setStatus(error.message || 'Offline-Kartenausschnitt konnte nicht erstellt werden.');
+    } finally {
+      extractButton.disabled = false;
+    }
+  }
+
   document.getElementById('offline-map-button').addEventListener('click', () => dialog.showModal());
   document.getElementById('close-offline-map').addEventListener('click', () => dialog.close());
+  extractButton.addEventListener('click', () => void extractCurrentView());
   document.getElementById('choose-offline-map').addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     if (fileInput.files?.[0]) void installFile(fileInput.files[0]);

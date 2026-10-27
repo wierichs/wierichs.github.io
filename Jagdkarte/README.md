@@ -391,9 +391,12 @@ cache-first; private imports are never loaded as part of that cross-region
 search. Loading uncached region data, explicit refreshes, and uncached map
 searches require a connection. The map toolbar's **Offline-Karte** control
 imports a regional `.pmtiles` vector-basemap package and keeps it in this
-browser's IndexedDB; the package is never uploaded. It is restored and used
-offline on later launches. Offline rendering requires a Protomaps basemap
-archive with `earth`, `roads`, and `water` vector layers. MapLibre renders the
+browser's IndexedDB; the package is never uploaded. The dialog submits the
+current map bounds to the free BBBike extract service in Shortbread format.
+BBBike processes requests asynchronously; with `email=nobody`, users find the
+download on BBBike's public status page and then import it into Jagdkarte.
+Packages are restored and used offline on later launches. Offline rendering
+supports Protomaps and Shortbread vector schemas. MapLibre renders the
 base layer beneath the existing Leaflet boundaries, markers, and controls.
 Standard OSM tiles and MapTiler satellite imagery remain online-only. The app
 does not prefetch OSM tiles, respecting the tile usage policy:
@@ -402,19 +405,12 @@ only use a provider that explicitly permits them or a package you prepared
 yourself. Offline authentication is not simulated. Loaded polygons remain
 cached across reloads.
 
-To prepare a regional package, install the standalone [PMTiles CLI](https://docs.protomaps.com/pmtiles/cli)
-and extract a bounding box from a clustered Protomaps daily archive. The output
-can then be imported using the map toolbar:
+BBBike extracts are asynchronous and subject to its fair-use policy. The
+extract name is public; do not enter personal or confidential information.
+BBBike/OSM attribution and Open Database License terms must be preserved.
 
-```powershell
-pmtiles extract https://build.protomaps.com/YYYYMMDD.pmtiles Jagdkarte-Region.pmtiles --bbox=MIN_LON,MIN_LAT,MAX_LON,MAX_LAT --maxzoom=15
-```
-
-Replace the date with an available daily build and the bounds with the desired
-region in longitude/latitude order. Smaller bounds and lower maximum zooms make
-smaller downloads. PMTiles archives must contain Protomaps basemap layers. OSM
-data is available under ODbL; retain the visible attribution and follow the
-license terms when redistributing a generated package.
+The dialog also accepts an existing PMTiles file from another provider. OSM
+tiles and MapTiler satellite images are not extracted or cached.
 
 An optional MapTiler Satellite basemap can be enabled by setting
 `mapTilerApiKey` in `config.js`. The key is used in the browser, so restrict it

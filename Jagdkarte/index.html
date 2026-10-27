@@ -19,7 +19,7 @@
   <script defer src="./lucide.js"></script>
   <script defer src="./supabase.js"></script>
   <script defer src="./config.js"></script>
-  <script type="module" src="./app.js?v=83"></script>
+  <script type="module" src="./app.js?v=85"></script>
 </head>
 <body>
   <header class="topbar">
@@ -126,6 +126,16 @@
   <dialog id="offline-map-dialog" aria-labelledby="offline-map-title">
     <div class="dialog-heading"><h2 id="offline-map-title">Offline-Karte</h2><button id="close-offline-map" class="icon-button" type="button" title="Schliessen" aria-label="Schliessen"><i data-lucide="x" aria-hidden="true"></i></button></div>
     <p id="offline-map-current" role="status">Keine Offline-Karte installiert.</p>
+    <section class="offline-map-extract" aria-labelledby="offline-map-extract-title">
+      <h3 id="offline-map-extract-title">Aktuellen Kartenausschnitt erstellen</h3>
+      <p>BBBike erstellt das Paket im Hintergrund. Es dauert meist 2 bis 7 Minuten; der Download erscheint danach auf der BBBike-Statusseite.</p>
+      <label for="offline-map-extract-name">Öffentlicher Name des Ausschnitts</label>
+      <input id="offline-map-extract-name" type="text" maxlength="60" value="Jagdkarte-Ausschnitt" autocomplete="off">
+      <button id="extract-offline-map" class="primary" type="button"><i data-lucide="external-link" aria-hidden="true"></i><span>Auftrag an BBBike senden</span></button>
+      <p id="offline-map-extract-note" role="status">Der Name ist auf der öffentlichen Statusseite sichtbar. Keine persönlichen Daten eintragen.</p>
+      <a class="offline-extract-status-link" href="https://download.bbbike.org/osm/extract/" target="_blank" rel="noopener noreferrer">BBBike-Status und Downloads öffnen</a>
+    </section>
+    <h3 class="offline-map-import-title">Vorhandenes Kartenpaket laden</h3>
     <button id="choose-offline-map" class="primary" type="button"><i data-lucide="upload" aria-hidden="true"></i><span>Kartenpaket importieren</span></button>
     <input id="offline-map-file" type="file" accept=".pmtiles,application/octet-stream" hidden>
     <label class="toggle offline-map-toggle"><input id="offline-map-enabled" type="checkbox" disabled><span>Offline-Karte verwenden</span></label>
