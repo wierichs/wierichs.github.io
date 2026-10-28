@@ -48,6 +48,18 @@ create table if not exists public.hunting_markers (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.hunting_profile_guest_links (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.hunting_profiles(id) on delete cascade,
+  marker_id uuid not null references public.hunting_markers(id) on delete cascade,
+  token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  created_by uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists hunting_profile_guest_links_expiry_idx
+  on public.hunting_profile_guest_links(expires_at);
+
 create table if not exists public.hunting_profile_locations (
   profile_id uuid not null references public.hunting_profiles(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -551,6 +563,7 @@ language sql security definer
 set search_path = ''
 as $$
   delete from public.hunting_markers where expires_at <= now();
+  delete from public.hunting_profile_guest_links where expires_at <= now();
 $$;
 
 do $$
@@ -615,9 +628,83 @@ begin
 end;
 $$;
 
+create or replace function public.create_hunting_profile_guest_link(
+  p_profile_id uuid, p_marker_id uuid, p_token text
+)
+returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not public.can_edit_hunting_profile(p_profile_id) then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann Gastlinks erstellen';
+  end if;
+  if p_token is null or p_token !~ '^[A-Za-z0-9_-]{43}$' then
+    raise exception 'Ungueltiger Gastlink';
+  end if;
+  if not exists (
+    select 1 from public.hunting_markers m
+    where m.id = p_marker_id and m.profile_id = p_profile_id
+      and (m.expires_at is null or m.expires_at > now())
+  ) then
+    raise exception 'Die Markierung ist nicht mehr verfuegbar';
+  end if;
+  delete from public.hunting_profile_guest_links where expires_at <= now();
+  insert into public.hunting_profile_guest_links(profile_id, marker_id, token_hash, created_by, expires_at)
+  values (p_profile_id, p_marker_id, encode(extensions.digest(p_token, 'sha256'), 'hex'), auth.uid(), now() + interval '7 days');
+end;
+$$;
+
+create or replace function public.accept_hunting_profile_guest_link(p_token text)
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  guest_link public.hunting_profile_guest_links%rowtype;
+  profile_data record;
+  verified_email text;
+begin
+  if auth.uid() is null then raise exception 'Zum Annehmen des Gastlinks bitte anmelden'; end if;
+  if p_token is null or p_token !~ '^[A-Za-z0-9_-]{43}$' then
+    raise exception 'Gastlink ungueltig oder abgelaufen';
+  end if;
+  select u.email into verified_email from auth.users u
+    where u.id = auth.uid() and u.email_confirmed_at is not null;
+  if verified_email is null then raise exception 'Bitte bestaetige zuerst deine E-Mail-Adresse'; end if;
+  select l.* into guest_link
+    from public.hunting_profile_guest_links l
+    join public.hunting_markers m on m.id = l.marker_id and m.profile_id = l.profile_id
+    where l.token_hash = encode(extensions.digest(p_token, 'sha256'), 'hex')
+      and l.expires_at > now() and (m.expires_at is null or m.expires_at > now())
+      and (exists (select 1 from public.hunting_profiles p where p.id = l.profile_id and p.owner_id = l.created_by)
+        or exists (select 1 from public.hunting_profile_members member
+          where member.profile_id = l.profile_id and member.user_id = l.created_by and member.role = 'editor'))
+    for update of l;
+  if not found then raise exception 'Gastlink ungueltig oder abgelaufen'; end if;
+  select p.id, p.source_id, p.feature_id, p.district_name, m.id as marker_id
+    into profile_data
+    from public.hunting_profiles p
+    join public.hunting_markers m on m.id = guest_link.marker_id and m.profile_id = p.id
+    where p.id = guest_link.profile_id;
+  if not found then raise exception 'Die Markierung ist nicht mehr verfuegbar'; end if;
+  insert into public.hunting_profile_members(profile_id, user_id, invited_by, role)
+    values (guest_link.profile_id, auth.uid(), guest_link.created_by, 'guest')
+    on conflict (profile_id, user_id) do nothing;
+  return jsonb_build_object(
+    'profile_id', profile_data.id,
+    'source_id', profile_data.source_id,
+    'feature_id', profile_data.feature_id,
+    'district_name', profile_data.district_name,
+    'marker_id', profile_data.marker_id
+  );
+end;
+$$;
+
 alter table public.hunting_profiles enable row level security;
 alter table public.hunting_profile_members enable row level security;
 alter table public.hunting_profile_invitations enable row level security;
+alter table public.hunting_profile_guest_links enable row level security;
 alter table public.hunting_markers enable row level security;
 alter table public.hunting_profile_locations enable row level security;
 alter table public.hunting_user_profiles enable row level security;
@@ -692,7 +779,7 @@ create policy "Users can remove their own profile location" on public.hunting_pr
   for delete to authenticated using (user_id = (select auth.uid()));
 
 revoke all on public.hunting_profiles, public.hunting_profile_members,
-  public.hunting_profile_invitations, public.hunting_markers,
+  public.hunting_profile_invitations, public.hunting_profile_guest_links, public.hunting_markers,
   public.hunting_profile_locations, public.hunting_user_profiles,
   public.hunting_dogs, public.hunting_dog_devices, public.hunting_dog_locations
   from public, anon, authenticated;
@@ -720,6 +807,8 @@ revoke all on function public.record_hunting_dog_location(uuid, double precision
 revoke all on function public.create_hunting_profile(text, text, text) from public, anon;
 revoke all on function public.invite_hunting_profile_member(uuid, text, text) from public, anon;
 revoke all on function public.accept_hunting_profile_invitations() from public, anon;
+revoke all on function public.create_hunting_profile_guest_link(uuid, uuid, text) from public, anon;
+revoke all on function public.accept_hunting_profile_guest_link(text) from public, anon;
 grant execute on function public.can_view_hunting_profile(uuid) to authenticated;
 grant execute on function public.owns_hunting_profile(uuid) to authenticated;
 grant execute on function public.can_edit_hunting_profile(uuid) to authenticated;
@@ -735,6 +824,8 @@ grant execute on function public.record_hunting_dog_location(uuid, double precis
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;
 grant execute on function public.invite_hunting_profile_member(uuid, text, text) to authenticated;
 grant execute on function public.accept_hunting_profile_invitations() to authenticated;
+grant execute on function public.create_hunting_profile_guest_link(uuid, uuid, text) to authenticated;
+grant execute on function public.accept_hunting_profile_guest_link(text) to authenticated;
 revoke all on function public.set_hunting_profile_boundary(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.set_hunting_marker_expiry() from public, anon, authenticated;
 revoke all on function public.create_temporary_hunting_marker(uuid, text, text, text,

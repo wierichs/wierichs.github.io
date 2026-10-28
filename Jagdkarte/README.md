@@ -102,6 +102,12 @@ any marker to their current browser-reported position, provided it is inside the
 profile boundary. The app uses a dedicated RPC for this operation; clients do
 not receive general marker UPDATE privileges.
 
+Owners and Bearbeiter can create a marker-specific guest link from any marker
+popup. The link expires after seven days. A recipient signs in or registers
+with a verified email; the server adds them as a guest without changing an
+existing member role, then opens the linked position. Rerun `schema.sql` to
+install the guest-link table and RPCs.
+
 Owners and Bearbeiter can register dogs in a profile and issue a one-time
 smartphone device key. All profile members see the last position while Jagdmodus
 is active, including positions outside the revier boundary. Turning Jagdmodus

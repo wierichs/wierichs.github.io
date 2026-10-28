@@ -9,7 +9,8 @@ export async function initializeAppFixture() {
   }
   const state = { user: null, mode: false, gpsRequests: 0, modeRequests: 0, profileQueries: 0, markerQueries: 0,
     failMarkerQuery: false, pendingMode: null, holdMode: false,
-    denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], markerType: 'sonstiges',
+    denyLocation: false, memberRole: 'guest', moveRequests: [], typeChangeRequests: [], createdGuestLinks: [],
+    acceptedGuestTokens: [], markerType: 'sonstiges',
     boundaryRequests: [], createdProfiles: [], importedProfiles: [], networkRequests: 0,
     dogs: [], dogLocations: [], createdDogs: [], issuedDogDevices: [], bbbikeRequests: [], tileLayers: [],
     currentPosition: { latitude: 49.5, longitude: 6.5 } };
@@ -100,7 +101,7 @@ export async function initializeAppFixture() {
     ];
     if (!state.user) return [];
     if (table === 'hunting_profiles') return [profile(), ...state.importedProfiles];
-    if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: 'member', role: state.memberRole }];
+    if (table === 'hunting_profile_members') return [{ profile_id: 'test-profile', user_id: state.user.id, role: state.memberRole }];
     if (table === 'hunting_dogs') return state.dogs;
     if (table === 'hunting_dog_locations') return state.dogLocations;
     if (table === 'hunting_markers') return [{ id: 'test-marker', profile_id: 'test-profile', type_id: state.markerType,
@@ -141,6 +142,14 @@ export async function initializeAppFixture() {
   const client = {
     from: query,
     rpc(name, parameters) {
+      if (name === 'create_hunting_profile_guest_link') {
+        state.createdGuestLinks.push(parameters);
+        return Promise.resolve({ data: null, error: null });
+      }
+      if (name === 'accept_hunting_profile_guest_link') {
+        state.acceptedGuestTokens.push(parameters.p_token);
+        return Promise.resolve({ data: { profile_id: 'test-profile', marker_id: 'test-marker' }, error: null });
+      }
       if (name === 'set_hunting_profile_boundary') {
         state.boundaryRequests.push(parameters);
         if (parameters.p_profile_id === 'test-profile') state.boundaryGeometry = parameters.p_geometry;
@@ -559,6 +568,15 @@ export async function runAppTests() {
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
     await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
       .some(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben'));
+    const guestLinkButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .find(button => button.getAttribute('aria-label') === 'Gastlink zu dieser Position erstellen und kopieren');
+    assert(guestLinkButton, 'An editor should be able to create a guest link from a marker popup.');
+    guestLinkButton.click();
+    await waitFor(() => state.createdGuestLinks.length === 1);
+    const guestLinkRequest = state.createdGuestLinks[0];
+    assert(guestLinkRequest.p_profile_id === 'test-profile' && guestLinkRequest.p_marker_id === 'test-marker' &&
+      /^[A-Za-z0-9_-]{43}$/.test(guestLinkRequest.p_token), 'Guest link creation should target the popup marker with a random token.');
+    passed.push('Editor can create a marker-specific guest link');
     const moveButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
       .find(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben');
     const removeButton = Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
@@ -659,7 +677,10 @@ export async function runAppTests() {
     await waitFor(() => frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon'));
     frame.document.querySelector('#map .leaflet-marker-pane img.leaflet-marker-icon').click();
     await waitFor(() => Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
-      .some(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben'));
+      .some(button => button.getAttribute('aria-label') === 'Gastlink zu dieser Position erstellen und kopieren'));
+    assert(Array.from(frame.document.querySelectorAll('.profile-marker-popup button'))
+      .some(button => button.getAttribute('aria-label') === 'Auf aktuelle Position verschieben'),
+    'Owner marker popup did not retain its position controls.');
     passed.push('Owner can move a marker from the popup');
     state.holdMode = true;
     control('hunting-mode').checked = false;
@@ -672,6 +693,31 @@ export async function runAppTests() {
       !control('app-layout').classList.contains('has-selection') && !control('search-panel-body').hidden,
     'A stale hunting mode write restarted profile UI or GPS.');
     passed.push('App ignores a pending hunting-mode response after selection changes');
+
+    const guestIframe = document.createElement('iframe');
+    guestIframe.style.cssText = 'position:fixed;left:-10000px;width:1200px;height:800px;border:0';
+    const guestInviteToken = 'A'.repeat(43);
+    guestIframe.src = `./tests.html?app-fixture#gast=${guestInviteToken}`;
+    document.body.append(guestIframe);
+    try {
+      await waitFor(() => guestIframe.contentWindow?.jagdkarteTest?.ready);
+      const guestFrame = guestIframe.contentWindow;
+      const guestState = guestFrame.jagdkarteTest;
+      const guestControl = id => guestFrame.document.getElementById(id);
+      guestState.signIn('guest');
+      await waitFor(() => !guestControl('user-label').hidden);
+      await waitFor(() => guestState.acceptedGuestTokens.length === 1 &&
+        guestControl('profile-list').value === 'test-profile' && guestFrame.document.querySelector('.profile-marker-popup'));
+      assert(guestState.acceptedGuestTokens[0] === guestInviteToken &&
+        guestFrame.document.querySelector('.profile-marker-popup strong')?.textContent === 'Testmarker',
+      'Redeeming a guest link should accept its token and open the linked marker.');
+      assert(!Array.from(guestFrame.document.querySelectorAll('.profile-marker-popup button'))
+        .some(button => button.getAttribute('aria-label') === 'Gastlink zu dieser Position erstellen und kopieren'),
+      'An invited guest must not be able to create guest links.');
+      passed.push('Invited guest cannot create a guest link');
+    } finally {
+      guestIframe.remove();
+    }
 
     const importMultiPolygon = async name => {
       const geometry = { type: 'MultiPolygon', coordinates: [

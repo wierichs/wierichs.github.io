@@ -7,6 +7,32 @@ const boundaryCacheName = 'jagdkarte-boundaries-v1';
 const selectionStorageKey = 'jagdkarte-last-selection-v1';
 const basemapPreferencesStorageKey = 'jagdkarte-basemap-preferences-v1';
 const profileSelectionStorageKey = 'jagdkarte-last-profile-v1';
+const pendingGuestLinkStorageKey = 'jagdkarte-pending-guest-link-v1';
+let pendingGuestLinkToken = null;
+let guestLinkRedemptionPending = false;
+
+function restoreGuestLinkToken() {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const token = fragment.get('gast');
+  if (token && /^[A-Za-z0-9_-]{43}$/.test(token)) {
+    pendingGuestLinkToken = token;
+    try { sessionStorage.setItem(pendingGuestLinkStorageKey, token); } catch {}
+    fragment.delete('gast');
+    const remaining = fragment.toString();
+    history.replaceState(history.state, '', `${location.pathname}${location.search}${remaining ? `#${remaining}` : ''}`);
+  }
+  if (!pendingGuestLinkToken) {
+    try { pendingGuestLinkToken = sessionStorage.getItem(pendingGuestLinkStorageKey); } catch {}
+  }
+}
+
+restoreGuestLinkToken();
+
+function createGuestLinkToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
 const locationConsentStorageKey = 'jagdkarte-location-consent-v1';
 const markerIconSizeStorageKey = 'jagdkarte-marker-icon-size-v1';
 const markerIconScales = { small: 0.8, standard: 1, large: 1.25 };
@@ -397,6 +423,13 @@ async function openSavedProfile(profile) {
     if (!feature) throw new Error('Das Revier ist in den verfuegbaren Grenzdaten nicht enthalten.');
     await selectFeature(feature, null, profile.id);
     if (revision !== savedOpenRevision || user?.id !== userId) return;
+    if (profile.target_marker_id) {
+      const target = profileMarkers.getLayers().find(layer => layer.options.guestInviteMarkerId === profile.target_marker_id);
+      if (target) {
+        map.setView(target.getLatLng(), Math.max(map.getZoom(), 15));
+        target.openPopup();
+      }
+    }
     renderResults();
     updateSavedProfileSelection();
     element('saved-status').textContent = `Ausgewaehlt: ${profile.district_name}`;
@@ -786,6 +819,9 @@ async function loadMarkerTypes() {
 function clearProfileMarkers() {
   markerExpiryTimers.forEach(timer => clearTimeout(timer));
   markerExpiryTimers = [];
+  profileMarkers.getLayers().forEach(marker => {
+    if (marker.isPopupOpen()) marker.closePopup();
+  });
   profileMarkers.clearLayers();
 }
 
@@ -1115,6 +1151,52 @@ async function loadProfileMarkers() {
       notes.textContent = marker.notes;
       popup.append(notes);
     }
+    if (canEditProfile(activeProfile)) {
+      const guestLinkButton = document.createElement('button');
+      guestLinkButton.type = 'button';
+      guestLinkButton.setAttribute('aria-label', 'Gastlink zu dieser Position erstellen und kopieren');
+      guestLinkButton.title = 'Gastlink zu dieser Position erstellen und kopieren';
+      const guestLinkIcon = document.createElement('i');
+      guestLinkIcon.setAttribute('data-lucide', 'link');
+      guestLinkIcon.setAttribute('aria-hidden', 'true');
+      guestLinkButton.append(guestLinkIcon);
+      const guestLinkField = document.createElement('input');
+      guestLinkField.type = 'url';
+      guestLinkField.readOnly = true;
+      guestLinkField.hidden = true;
+      guestLinkField.setAttribute('aria-label', 'Gastlink');
+      guestLinkField.className = 'profile-marker-guest-link';
+      const markerProfileId = activeProfile.id;
+      const markerUserId = user.id;
+      guestLinkButton.addEventListener('click', async () => {
+        if (activeProfile?.id !== markerProfileId || user?.id !== markerUserId || !canEditProfile()) return;
+        guestLinkButton.disabled = true;
+        try {
+          const token = createGuestLinkToken();
+          const { error: linkError } = await supabaseClient.rpc('create_hunting_profile_guest_link', {
+            p_profile_id: markerProfileId, p_marker_id: marker.id, p_token: token
+          });
+          if (linkError) throw new Error(linkError.message);
+          const inviteUrl = new URL('./', location.href);
+          inviteUrl.hash = new URLSearchParams({ gast: token }).toString();
+          guestLinkField.value = inviteUrl.href;
+          guestLinkField.hidden = false;
+          try {
+            await navigator.clipboard.writeText(inviteUrl.href);
+            profileStatus('Gastlink kopiert. Er ist 7 Tage gueltig und fuehrt zu dieser Position.');
+          } catch {
+            guestLinkField.focus();
+            guestLinkField.select();
+            profileStatus('Gastlink erstellt. Der Link steht im Popup zum Kopieren bereit.');
+          }
+        } catch (error) {
+          profileStatus(`Gastlink konnte nicht erstellt werden: ${error.message}`);
+        } finally {
+          guestLinkButton.disabled = false;
+        }
+      });
+      popup.append(guestLinkButton, guestLinkField);
+    }
     if (canEditProfile(activeProfile) && !type.temporary) {
       const editType = document.createElement('button');
       editType.type = 'button';
@@ -1284,6 +1366,7 @@ async function loadProfileMarkers() {
     }
     const scale = markerIconScales[markerIconSize];
     const mapMarker = L.marker([marker.latitude, marker.longitude], {
+      guestInviteMarkerId: marker.id,
       icon: L.icon({
         iconUrl: type.iconUrl,
         iconSize: type.iconSize.map(value => Math.round(value * scale)),
@@ -2623,6 +2706,34 @@ async function applySession(session) {
       void loadProfiles();
     }
   }
+  if (pendingGuestLinkToken && user) void redeemPendingGuestLink();
+  else if (pendingGuestLinkToken && auth && !element('login-dialog').open) {
+    element('login-dialog').showModal();
+    element('login-status').textContent = 'Melde dich an oder registriere dich, um dem Revier als Gast beizutreten.';
+  }
+}
+
+async function redeemPendingGuestLink() {
+  if (!user || !pendingGuestLinkToken || guestLinkRedemptionPending) return;
+  guestLinkRedemptionPending = true;
+  const token = pendingGuestLinkToken;
+  profileStatus('Gastlink wird geprueft ...');
+  try {
+    const { data, error } = await supabaseClient.rpc('accept_hunting_profile_guest_link', { p_token: token });
+    if (error) throw new Error(error.message);
+    if (!data?.profile_id || !data?.marker_id) throw new Error('Gastlink enthaelt kein gueltiges Revierziel.');
+    pendingGuestLinkToken = null;
+    try { sessionStorage.removeItem(pendingGuestLinkStorageKey); } catch {}
+    if (!await loadSavedProfiles()) throw new Error('Das Revier konnte nach dem Beitritt nicht geladen werden.');
+    const profile = savedProfiles.find(candidate => candidate.id === data.profile_id);
+    if (!profile) throw new Error('Das eingeladene Revier ist fuer dieses Konto nicht verfuegbar.');
+    await openSavedProfile({ ...profile, target_marker_id: data.marker_id });
+    profileStatus(`Du bist dem Revier als Gast beigetreten: ${profile.district_name}.`);
+  } catch (error) {
+    profileStatus(`Gastlink konnte nicht angenommen werden: ${error.message}`);
+  } finally {
+    guestLinkRedemptionPending = false;
+  }
 }
 
 element('user-label').addEventListener('click', async () => {
@@ -2684,6 +2795,7 @@ element('login-form').addEventListener('submit', async event => {
   element('login-status').textContent = registering ? 'Registrierungscode wird angefordert ...' : 'Anmeldecode wird angefordert ...';
   try {
     const redirect = new URL('./', location.href);
+    if (pendingGuestLinkToken) redirect.hash = new URLSearchParams({ gast: pendingGuestLinkToken }).toString();
     const { error } = await auth.signInWithOtp({ email, options: {
       emailRedirectTo: redirect.href,
       shouldCreateUser: registering
