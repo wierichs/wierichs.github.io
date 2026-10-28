@@ -88,10 +88,15 @@ create table if not exists public.hunting_dog_devices (
   id uuid primary key default gen_random_uuid(),
   dog_id uuid not null references public.hunting_dogs(id) on delete cascade,
   token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  relay_signing_public_key text,
   created_at timestamptz not null default now(),
   last_seen_at timestamptz,
   revoked_at timestamptz
 );
+alter table public.hunting_dog_devices
+  add column if not exists relay_signing_public_key text;
+comment on column public.hunting_dog_devices.relay_signing_public_key is
+  'Base64url-encoded RSA SPKI public key used to verify signed relayed locations.';
 
 create unique index if not exists hunting_dog_devices_one_active_idx
   on public.hunting_dog_devices(dog_id) where revoked_at is null;

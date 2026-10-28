@@ -1,6 +1,6 @@
 # Schnittstelle fuer Hundestandorte
 
-Diese Schnittstelle verbindet eine spaetere Smartphone-App mit den in der
+Diese Schnittstelle verbindet die Android-App Hundetracker mit den in der
 Jagdkarte registrierten Hunden. Sie uebertraegt ausschliesslich die jeweils
 letzte Position, keine Route und keinen Positionsverlauf.
 
@@ -100,3 +100,40 @@ Die Reviergrenze ist keine Positionsgrenze: Auch Fixes ausserhalb des Polygons
 werden angenommen und auf der Karte angezeigt. Positionen aelter als zwei
 Minuten werden in der Karte als veraltet markiert. Es wird keine Historie
 angelegt.
+
+## Relay-Schnittstelle
+
+Die separate Edge Function `dog-location-relay` ergaenzt den direkten
+Uploadweg. Die bestehende Funktion `dog-location` bleibt unveraendert. Die
+Android-App kann pro Tracker einen oeffentlichen Signaturschluessel
+registrieren und Positionsmeldungen als verschluesselte, signierte Relay-
+Nachrichten ueber Nearby Connections weitergeben. Relay ist standardmaessig
+ausgeschaltet; vor einem lokalen Transfer muessen Nutzer den Nearby-
+Sicherheitscode auf beiden Geraeten vergleichen.
+
+Die App ruft `POST /functions/v1/dog-location-relay` mit dem bisherigen
+Geraeteschluessel im Authorization-Header auf. Supabase-JWT-Pruefung ist fuer
+diese Funktion ausgeschaltet; die Funktion prueft den Tracker-Geraeteschluessel
+selbst. `{"action":"get_server_key"}`
+liefert die oeffentliche RSA-Verschluesselungsschluessel-ID und den Schluessel.
+`{"action":"register_key","public_key":"..."}` registriert den
+Base64url-kodierten RSA-SPKI-Signaturschluessel des aufrufenden Geraets und
+liefert dessen `device_id` zurueck. Diese Registrierung darf nur mit dem
+Geraeteschluessel erfolgen, dem das Geraet zugeordnet ist.
+
+Ein Relay-Request enthaelt `origin_device_id`, `message_id`, `expires_at`,
+`key_id`, `encrypted_key`, `nonce`, `ciphertext` und `signature`. Das Relais
+authentifiziert sich mit seinem eigenen Geraeteschluessel. Die Funktion
+verifiziert die Signatur des Ursprungsgeraets, verlangt dass Ursprung und
+Relais zum selben Revierprofil gehoeren, entschluesselt die Standortdaten nur
+serverseitig und ruft `record_hunting_dog_location` mit der ID des
+Ursprungsgeraets auf. Details zu Schluesselverwaltung und Signaturformat stehen
+in [supabase/README.md](./supabase/README.md).
+
+Nachrichten verfallen spaetestens nach 24 Stunden; Messungen aelter als 24
+Stunden werden verworfen. Die Android-App unterstuetzt aktuell einen Relay-Hop;
+der Empfaenger laedt die Nachricht mit seinem eigenen Geraeteschluessel hoch.
+Die RPC speichert weiterhin nur die jeweils neueste
+Position und lehnt aeltere oder gleiche Messzeitpunkte ohne Positionsupdate ab.
+Eine separate Nachrichten-ID-Tabelle fuer dauerhafte Deduplizierung ist nicht
+Teil dieser ersten Serverstufe.

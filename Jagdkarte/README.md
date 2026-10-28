@@ -114,6 +114,9 @@ is active, including positions outside the revier boundary. Turning Jagdmodus
 off removes the last positions. The phone integration contract and deployment
 steps are in [hundestandort-api.md](./hundestandort-api.md). Rerun `schema.sql`
 and deploy the `dog-location` Supabase Edge Function after updating the app.
+The separate `dog-location-relay` function supports the Android app's opt-in,
+one-hop relay flow. The direct `dog-location` endpoint remains unchanged. See
+[Supabase relay setup](./supabase/README.md) for key management and deployment.
 Each signed-in user can click their email address in the header to set an
 optional **Anzeigename** for shared-revier participants. Only members of a
 shared profile can retrieve participant names and emails; blank names fall back
