@@ -75,6 +75,9 @@ Die neue Migration ersetzt das Basisschema nicht.
 2. **Relaisfreigabe** einschalten, gesondert zustimmen und die erforderlichen
    Benachrichtigungs-/Nearby-Berechtigungen freigeben. Die Erstregistrierung
    benoetigt Internet, aber keinen Hundeschluessel.
+  Android kann fuer die Nearby-Geraetesuche auch groben und praezisen
+  Standortzugriff verlangen; dadurch wird die eigene Revier-Standortfreigabe
+  nicht aktiviert.
 3. Fuer neue Funkverbindungen den Sicherheitscode auf beiden Geraeten vergleichen.
 4. **Standort mit diesem Revier teilen** bleibt eine separate Entscheidung.
    Bei aktivem Relais werden eigene Fixes verschluesselt dauerhaft eingereiht.
