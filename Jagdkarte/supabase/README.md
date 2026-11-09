@@ -1,9 +1,19 @@
 # Supabase-Hundestandort-Relais
 
+## Revier-Relay der nativen Android-App
+
+Die additive Serverstufe `location-relay` fuer Benutzergeraete der nativen
+Jagdkarte ist separat dokumentiert: [location-relay.md](location-relay.md).
+Sie ersetzt weder `dog-location` noch das nachfolgend beschriebene
+`dog-location-relay` fuer Hundetracker. Beide Relais bleiben unabhaengige
+Endpunkte und verwenden getrennte Secrets.
+
 Die Funktion `dog-location-relay` ergaenzt die Hundestandort-Schnittstelle und
 aendert `dog-location` nicht. Die Android-App unterstuetzt
 Schluesselregistrierung und opt-in Ein-Hop-Weitergabe ueber Nearby Connections.
 Lokale Verbindungen erfordern einen bestaetigten Sicherheitscode.
+Dieses Hundetracker-Relay bleibt getrennt vom Benutzer-Revier-Relay
+`location-relay` der nativen Jagdkarte.
 
 ## Sicherheitsmodell
 

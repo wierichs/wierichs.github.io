@@ -1,0 +1,6 @@
+{
+  "lock": true,
+  "tasks": {
+    "test": "deno test --allow-read --allow-env --allow-net functions tests"
+  }
+}

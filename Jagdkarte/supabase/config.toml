@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.dog-location-relay]
 verify_jwt = false
+
+[functions.location-relay]
+verify_jwt = false
+entrypoint = "./functions/location-relay/serve.ts"
