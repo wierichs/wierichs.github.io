@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.wierichs.jagdkarte",
+      "sha256_cert_fingerprints": [
+        "04:66:52:77:23:EA:06:7B:35:DD:BA:87:2E:6E:DE:A7:FD:90:09:7A:AC:91:6F:F0:E8:F7:62:6B:4E:D2:1D:4D"
+      ]
+    }
+  }
+]
