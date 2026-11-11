@@ -96,13 +96,23 @@ werden. Entferne temporaere Dateien erst, wenn die Sicherung geprueft ist.
 ### DogTracker-QR-Kopplung aus der Jagdkarte
 
 Der optionale Gegenweg, bei dem Jagdkarte einen im DogTracker erzeugten QR-Code
-scannt, benoetigt zusaetzlich die additive Migration
-[`202611110001_register_hunting_dog_device_token.sql`](migrations/202611110001_register_hunting_dog_device_token.sql).
-Sie kann nach Pruefung von Projekt und Backup im SQL Editor ausgefuehrt werden;
-sie fuegt keine Tabelle hinzu, sondern ergaenzt eine rollenpruefende RPC. Die
-gleiche Funktion ist in `schema.sql` enthalten. Vor Anwendung der Migration
-bleiben der bisherige Jagdkarte-QR und die manuelle Schluesseleingabe nutzbar;
-kein Edge-Function-Deploy ist fuer diese RPC erforderlich.
+scannt, benoetigt die additiven Migrationen
+[`202611110001_register_hunting_dog_device_token.sql`](migrations/202611110001_register_hunting_dog_device_token.sql)
+und
+[`202611110002_two_phase_dog_device_pairing.sql`](migrations/202611110002_two_phase_dog_device_pairing.sql)
+in dieser Reihenfolge. Die zweite Migration ergaenzt eine private Tabelle fuer
+vorgemerkte Schluessel sowie `stage_hunting_dog_device_token` und
+`complete_hunting_dog_device_pairing`. Die aktuelle Android-App verwendet die
+neue Vormerk-RPC; die aeltere `register_hunting_dog_device_token` bleibt fuer
+bisherige Clients erhalten. Dadurch veraendert ein Backend ohne die zweite
+Migration den aktiven Schluessel nicht. Der bisherige aktive Schluessel bleibt
+bis zur Bestaetigung im DogTracker gueltig; wiederholte Scans und
+Bestaetigungen nach einem Timeout sind idempotent. Nur der hoch-entropische
+Geraeteschluessel kann die anonyme Abschluss-RPC aufrufen. Direkte
+Tabellenzugriffe bleiben gesperrt. Funktionen und Tabellen sind auch in
+`schema.sql` abgebildet. Die Migrationen sind hier vorbereitet, aber nicht
+ausgefuehrt oder deployed; vor einer manuellen Anwendung Projekt und Backup
+pruefen. Ein Edge-Function-Deploy ist nicht erforderlich.
 
 ## API-Vertrag
 

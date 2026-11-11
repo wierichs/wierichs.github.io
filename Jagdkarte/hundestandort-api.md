@@ -28,8 +28,17 @@ Owner und Bearbeiter legen einen Hund im ausgewaehlten Revierprofil an. Mit
 **Smartphone koppeln** erzeugt die Jagdkarte einen zufaelligen Schluessel mit
 256 Bit Entropie. Er wird genau einmal angezeigt und muss von der Smartphone-
 App sicher gespeichert werden (Android Keystore beziehungsweise iOS Keychain).
-Die Datenbank speichert nur seinen SHA-256-Hash. Ein neu ausgestellter
-Schluessel widerruft den vorherigen Schluessel fuer diesen Hund.
+Die Datenbank speichert nur seinen SHA-256-Hash. Bei diesem Weg wird der
+bisherige Schluessel beim Ausstellen des neuen Schluessels widerrufen.
+
+Alternativ kann der DogTracker den Schluessel erzeugen und als QR-Code
+anzeigen. Jagdkarte merkt diesen Schluessel nach dem Scan vor; der bisherige
+Schluessel bleibt aktiv, bis der DogTracker die Kopplung bestaetigt. Die
+Bestaetigung und ein Abbruch benoetigen eine Internetverbindung. Bei einem
+unklaren Timeout kann dieselbe Aktion wiederholt werden: Bereits aktivierte
+Schluessel werden erkannt, und ein Abbruch loescht keinen bereits aktivierten
+Schluessel. Der aktive Schluessel wechselt erst atomar bei erfolgreicher
+Bestaetigung.
 
 Die IMEI wird weder benoetigt noch gespeichert. Der Schluessel ist ein
 Bearer-Geheimnis: Wer ihn besitzt, kann Positionen fuer den zugeordneten Hund
