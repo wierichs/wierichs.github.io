@@ -335,6 +335,47 @@ begin
 end;
 $$;
 
+create or replace function public.register_hunting_dog_device_token(
+  p_dog_id uuid,
+  p_device_token text
+)
+returns uuid
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  target_profile_id uuid;
+  new_device_id uuid := gen_random_uuid();
+begin
+  if auth.uid() is null then
+    raise exception 'Anmeldung erforderlich';
+  end if;
+  if p_device_token is null or p_device_token !~ '^[0-9a-f]{64}$' then
+    raise exception 'Ungueltiger Hundegeraeteschluessel';
+  end if;
+
+  select dog.profile_id into target_profile_id
+  from public.hunting_dogs dog
+  where dog.id = p_dog_id
+    and public.can_edit_hunting_profile(dog.profile_id)
+  for update;
+
+  if target_profile_id is null then
+    raise exception 'Nur der Owner oder ein Bearbeiter kann ein Hundegeraet koppeln';
+  end if;
+
+  update public.hunting_dog_devices
+  set revoked_at = now()
+  where dog_id = p_dog_id and revoked_at is null;
+
+  insert into public.hunting_dog_devices (id, dog_id, token_hash)
+  values (new_device_id, p_dog_id,
+    encode(extensions.digest(convert_to(p_device_token, 'UTF8'), 'sha256'), 'hex'));
+
+  return new_device_id;
+end;
+$$;
+
 create or replace function public.record_hunting_dog_location(
   p_device_id uuid, p_latitude double precision, p_longitude double precision,
   p_accuracy double precision, p_recorded_at timestamptz
@@ -807,6 +848,7 @@ revoke all on function public.set_hunting_mode(uuid, boolean) from public, anon,
 revoke all on function public.create_hunting_dog(uuid, text) from public, anon;
 revoke all on function public.delete_hunting_dog(uuid) from public, anon;
 revoke all on function public.create_hunting_dog_device(uuid) from public, anon;
+revoke all on function public.register_hunting_dog_device_token(uuid, text) from public, anon, authenticated;
 revoke all on function public.record_hunting_dog_location(uuid, double precision, double precision,
   double precision, timestamptz) from public, anon, authenticated;
 revoke all on function public.create_hunting_profile(text, text, text) from public, anon;
@@ -824,6 +866,7 @@ grant execute on function public.set_hunting_mode(uuid, boolean) to authenticate
 grant execute on function public.create_hunting_dog(uuid, text) to authenticated;
 grant execute on function public.delete_hunting_dog(uuid) to authenticated;
 grant execute on function public.create_hunting_dog_device(uuid) to authenticated;
+grant execute on function public.register_hunting_dog_device_token(uuid, text) to authenticated;
 grant execute on function public.record_hunting_dog_location(uuid, double precision, double precision,
   double precision, timestamptz) to service_role;
 grant execute on function public.create_hunting_profile(text, text, text) to authenticated;

@@ -93,6 +93,17 @@ Sicherung des privaten Verschluesselungsschluessels auf; ohne ihn koennen noch
 nicht zugestellte, bereits verschluesselte Relaismeldungen nicht entschluesselt
 werden. Entferne temporaere Dateien erst, wenn die Sicherung geprueft ist.
 
+### DogTracker-QR-Kopplung aus der Jagdkarte
+
+Der optionale Gegenweg, bei dem Jagdkarte einen im DogTracker erzeugten QR-Code
+scannt, benoetigt zusaetzlich die additive Migration
+[`202611110001_register_hunting_dog_device_token.sql`](migrations/202611110001_register_hunting_dog_device_token.sql).
+Sie kann nach Pruefung von Projekt und Backup im SQL Editor ausgefuehrt werden;
+sie fuegt keine Tabelle hinzu, sondern ergaenzt eine rollenpruefende RPC. Die
+gleiche Funktion ist in `schema.sql` enthalten. Vor Anwendung der Migration
+bleiben der bisherige Jagdkarte-QR und die manuelle Schluesseleingabe nutzbar;
+kein Edge-Function-Deploy ist fuer diese RPC erforderlich.
+
 ## API-Vertrag
 
 Alle Anfragen sind `POST` mit JSON und optionalem
